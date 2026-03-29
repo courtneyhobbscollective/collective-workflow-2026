@@ -1,0 +1,523 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  team_member
+  client
+}
+
+enum ClientStatus {
+  active
+  paused
+  archived
+}
+
+/** Commercial relationship: ongoing retainer vs discrete project work. */
+enum ClientEngagementType {
+  retainer
+  project
+}
+
+enum ScopeType {
+  retainer
+  project
+  ad_hoc
+}
+
+/** Preset catalog: fixed deliverable package vs retainer scope shell. */
+enum ServiceProductKind {
+  fixed_package
+  retainer_template
+}
+
+enum BriefPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum BriefStatus {
+  draft
+  awaiting_internal_start
+  scheduled
+  in_progress
+  awaiting_client_review
+  amends_requested
+  first_round_amends
+  second_round_amends
+  approved
+  completed
+  archived
+}
+
+enum BriefType {
+  web_design_dev
+  app_dev
+  video
+  photo
+  design
+  content
+}
+
+enum ScopeStatus {
+  in_scope
+  watch_scope
+  out_of_scope
+  awaiting_admin_review
+}
+
+enum DeliverableType {
+  video
+  image
+  design
+  web
+  strategy
+  other
+}
+
+enum AssignmentRole {
+  producer
+  editor
+  shooter
+  designer
+  pm
+  other
+}
+
+enum BookingType {
+  shoot
+  edit
+  amends
+  review
+  delivery
+  internal
+  other
+}
+
+enum InternalNoteType {
+  general
+  scope
+  risk
+  handover
+  blocker
+}
+
+enum ThreadType {
+  client
+  internal
+}
+
+enum ClientContactRole {
+  point_of_contact
+  accounts_contact
+  other
+}
+
+enum ClientAssetType {
+  brand_guidelines
+  other
+}
+
+enum TeamChannelMessageKind {
+  user
+  system
+}
+
+/** Sales pipeline for CRM leads (pre-client). */
+enum LeadPipelineStatus {
+  active
+  contacted
+  quoted
+  followed_up
+  won
+  lost
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  fullName      String
+  phoneNumber   String?
+  avatarUrl     String?
+  role          UserRole
+  clientId      String?
+  client        Client?           @relation(fields: [clientId], references: [id])
+  assignments   BriefAssignment[]
+  sentMessages  Message[]         @relation("MessageSender")
+  briefUpdates  BriefUpdate[]     @relation("BriefUpdateAuthor")
+  internalNotes InternalNote[]    @relation("InternalNoteAuthor")
+  timeLogs      TimeLog[]
+  notifications Notification[]
+  calendarBookings CalendarBooking[]
+  activityLogs  ActivityLog[]
+  teamChannelMembers TeamChannelMember[]
+  teamChannelMessages TeamChannelMessage[] @relation("TeamChannelMessageSender")
+  dmThreadsLow  DmThread[] @relation("DmThreadLow")
+  dmThreadsHigh DmThread[] @relation("DmThreadHigh")
+  dmMessages    DmMessage[] @relation("DmMessageSender")
+  dashboardFeedDismissals DashboardFeedDismissal[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+model Client {
+  id              String            @id @default(cuid())
+  name            String
+  status          ClientStatus      @default(active)
+  engagementType  ClientEngagementType @default(project)
+  brandSummary    String?
+  email           String?
+  phoneNumber    String?
+  timezone        String            @default("Europe/London")
+  /// How often the team should check in (days). Null = no cadence / reminders.
+  relationshipContactFrequencyDays Int?
+  nextRelationshipContactDueAt     DateTime?
+  lastRelationshipContactAt        DateTime?
+  /// Set when we notify admins for the current due cycle; cleared when contact is logged.
+  relationshipContactLastNotifiedAt DateTime?
+  contacts        ClientContact[]
+  users           User[]
+  briefs          Brief[]
+  calendar        CalendarBooking[]
+  notifications   Notification[]
+  assets          ClientAsset[]
+  teamChannel     TeamChannel?
+  sourceLead      Lead?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model Lead {
+  id                 String             @id @default(cuid())
+  name               String
+  email              String
+  /// Company or organisation the contact belongs to (optional for solo leads).
+  companyName        String?
+  position           String?
+  phoneNumber        String?
+  status             LeadPipelineStatus @default(active)
+  lastContactedAt    DateTime?
+  /// Admin follow-up reminder fires after this time (typically lastContactedAt + 3 days).
+  nextFollowUpDueAt          DateTime?
+  followUpReminderNotifiedAt DateTime?
+  quotedAt           DateTime?
+  followedUpAt       DateTime?
+  wonAt              DateTime?
+  lostAt             DateTime?
+  lostReason         String?
+  notes              String?
+  /// Pricing calculator payload: { lineItems: [{ description, unitPriceExVat, quantity }], vatRate }
+  quoteSnapshot      Json?
+  /// Optional extra clauses appended to the generated contract HTML.
+  contractCustomBody String?
+  convertedClientId  String?            @unique
+  convertedClient    Client?            @relation(fields: [convertedClientId], references: [id], onDelete: SetNull)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@index([nextFollowUpDueAt])
+}
+
+model TeamChannel {
+  id        String   @id @default(cuid())
+  name      String
+  clientId  String?  @unique
+  client    Client?  @relation(fields: [clientId], references: [id])
+  members   TeamChannelMember[]
+  messages  TeamChannelMessage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TeamChannelMember {
+  id        String      @id @default(cuid())
+  channelId String
+  channel   TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([channelId, userId])
+  @@index([userId])
+}
+
+model TeamChannelMessage {
+  id        String                  @id @default(cuid())
+  channelId String
+  channel   TeamChannel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  senderId  String?
+  sender    User?                   @relation("TeamChannelMessageSender", fields: [senderId], references: [id])
+  kind      TeamChannelMessageKind  @default(user)
+  body      String
+  metadata  Json?
+  createdAt DateTime                @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+model DmThread {
+  id          String   @id @default(cuid())
+  lowUserId   String
+  highUserId  String
+  lowUser     User     @relation("DmThreadLow", fields: [lowUserId], references: [id], onDelete: Cascade)
+  highUser    User     @relation("DmThreadHigh", fields: [highUserId], references: [id], onDelete: Cascade)
+  messages    DmMessage[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([lowUserId, highUserId])
+  @@index([lowUserId])
+  @@index([highUserId])
+}
+
+model DmMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  thread    DmThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("DmMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+model ClientContact {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  name        String
+  email       String
+  title       String?
+  isPrimary   Boolean  @default(false)
+  role        ClientContactRole @default(other)
+  createdAt   DateTime @default(now())
+
+  @@unique([clientId, role])
+}
+
+model ClientAsset {
+  id          String         @id @default(cuid())
+  clientId    String
+  client      Client         @relation(fields: [clientId], references: [id])
+  type        ClientAssetType @default(brand_guidelines)
+  fileName    String
+  mimeType    String?
+  url         String
+  createdAt   DateTime       @default(now())
+
+  @@index([clientId, type])
+}
+
+model ServiceProduct {
+  id                  String                           @id @default(cuid())
+  name                String
+  description         String?
+  kind                ServiceProductKind
+  scopeType           ScopeType
+  serviceType         BriefType?
+  serviceDetails      Json?
+  monthlyRetainer     Float?
+  projectBudget       Float?
+  /// When assigning a fixed package, brief deadline defaults to today + this many days.
+  defaultDeadlineDays Int                              @default(30)
+  deliverableTemplates ServiceProductDeliverableTemplate[]
+  briefs               Brief[]
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+}
+
+model ServiceProductDeliverableTemplate {
+  id               String         @id @default(cuid())
+  serviceProductId String
+  serviceProduct   ServiceProduct @relation(fields: [serviceProductId], references: [id], onDelete: Cascade)
+  sortOrder        Int            @default(0)
+  title            String
+  deliverableType  DeliverableType
+  daysFromStart    Int            @default(7)
+
+  @@index([serviceProductId])
+}
+
+model Brief {
+  id                String            @id @default(cuid())
+  clientId          String
+  client            Client            @relation(fields: [clientId], references: [id])
+  serviceProductId  String?
+  serviceProduct    ServiceProduct?   @relation(fields: [serviceProductId], references: [id], onDelete: SetNull)
+  title             String
+  description       String
+  briefType         BriefType         @default(content)
+  typeDetails       Json?
+  priority          BriefPriority     @default(medium)
+  /// Order within the Live work board for `in_progress` briefs (per priority column).
+  liveWorkOrder     Int               @default(0)
+  status            BriefStatus       @default(draft)
+  scopeStatus       ScopeStatus       @default(in_scope)
+  deadline          DateTime
+  completedAt       DateTime?
+  /// Optional URL for client review (e.g. Frame.io, Google Doc).
+  reviewLink        String?
+  /// Target date for internal handoff / internal delivery milestone.
+  internalDeliveryDate DateTime?
+  /// Target date promised to the client for final delivery.
+  clientDeliveryDate   DateTime?
+  assignments       BriefAssignment[]
+  deliverables      Deliverable[]
+  updates           BriefUpdate[]
+  internalNotes     InternalNote[]
+  messageThreads    MessageThread[]
+  bookings          CalendarBooking[]
+  timeLogs          TimeLog[]
+  activityLogs      ActivityLog[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([serviceProductId])
+}
+
+model BriefAssignment {
+  id         String         @id @default(cuid())
+  briefId    String
+  brief      Brief          @relation(fields: [briefId], references: [id])
+  userId     String
+  user       User           @relation(fields: [userId], references: [id])
+  role       AssignmentRole
+  createdAt  DateTime       @default(now())
+
+  @@unique([briefId, userId, role])
+}
+
+model Deliverable {
+  id           String          @id @default(cuid())
+  briefId      String
+  brief        Brief           @relation(fields: [briefId], references: [id])
+  title        String
+  deliverableType DeliverableType
+  deliveryDate DateTime
+  completed    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+}
+
+model BriefUpdate {
+  id          String   @id @default(cuid())
+  briefId     String
+  brief       Brief    @relation(fields: [briefId], references: [id])
+  authorId    String
+  author      User     @relation("BriefUpdateAuthor", fields: [authorId], references: [id])
+  content     String
+  visibleToClient Boolean @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model InternalNote {
+  id          String           @id @default(cuid())
+  briefId     String
+  brief       Brief            @relation(fields: [briefId], references: [id])
+  authorId    String
+  author      User             @relation("InternalNoteAuthor", fields: [authorId], references: [id])
+  noteType    InternalNoteType @default(general)
+  content     String
+  createdAt   DateTime         @default(now())
+}
+
+model MessageThread {
+  id          String      @id @default(cuid())
+  briefId     String
+  brief       Brief       @relation(fields: [briefId], references: [id])
+  threadType  ThreadType
+  title       String
+  messages    Message[]
+  createdAt   DateTime    @default(now())
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  threadId    String
+  thread      MessageThread @relation(fields: [threadId], references: [id])
+  senderId    String
+  sender      User          @relation("MessageSender", fields: [senderId], references: [id])
+  body        String
+  createdAt   DateTime      @default(now())
+}
+
+model CalendarBooking {
+  id               String      @id @default(cuid())
+  briefId          String?
+  brief            Brief?      @relation(fields: [briefId], references: [id])
+  clientId         String?
+  client           Client?     @relation(fields: [clientId], references: [id])
+  /// When set, this booking is tied to a team member’s schedule (also listed on the main calendar).
+  userId           String?
+  user             User?       @relation(fields: [userId], references: [id])
+  bookingType      BookingType
+  title            String
+  startsAt         DateTime
+  endsAt           DateTime
+  visibleToClient  Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+
+  @@index([userId])
+}
+
+model TimeLog {
+  id          String   @id @default(cuid())
+  briefId     String
+  brief       Brief    @relation(fields: [briefId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  daysSpent   Float
+  hoursSpent  Float
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  title       String
+  body        String
+  /// In-app link (e.g. /briefs/…, /messages/…).
+  href        String?
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  briefId     String?
+  brief       Brief?   @relation(fields: [briefId], references: [id])
+  action      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  dashboardFeedDismissals DashboardFeedDismissal[]
+}
+
+/// Hides a team activity row from a user’s dashboard feed only (does not delete the log).
+model DashboardFeedDismissal {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityLogId String
+  activityLog   ActivityLog @relation(fields: [activityLogId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([userId, activityLogId])
+  @@index([userId])
+}
