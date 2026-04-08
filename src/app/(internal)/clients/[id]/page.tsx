@@ -5,9 +5,8 @@ import { Section } from "@/components/workflow/section";
 import { ClientStatusPill } from "@/components/workflow/status-pill";
 import { prisma } from "@/lib/prisma";
 import { getSessionRole } from "@/lib/auth";
-import { updateClient } from "@/app/actions";
+import { recordClientRelationshipContact, updateClient, updateClientRelationshipCadence } from "@/app/actions";
 import { Badge } from "@/components/ui";
-import { recordClientRelationshipContact, updateClientRelationshipCadence } from "@/app/crm/crm-actions";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

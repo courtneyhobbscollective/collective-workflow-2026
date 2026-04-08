@@ -269,6 +269,75 @@ export async function updateClient(formData: FormData) {
   revalidatePath("/clients");
 }
 
+export async function updateClientRelationshipCadence(formData: FormData) {
+  await requireRole(["admin"]);
+
+  const clientId = String(formData.get("clientId") || "").trim();
+  if (!clientId) return;
+
+  const raw = String(formData.get("relationshipContactFrequencyDays") || "").trim();
+  const parsed = raw ? Number(raw) : null;
+
+  if (parsed == null || Number.isNaN(parsed)) {
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        relationshipContactFrequencyDays: null,
+        nextRelationshipContactDueAt: null,
+      },
+    });
+  } else {
+    const frequency = Math.max(1, Math.min(365, Math.floor(parsed)));
+    const existing = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { lastRelationshipContactAt: true },
+    });
+    if (!existing) return;
+
+    const anchor = existing.lastRelationshipContactAt ?? new Date();
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        relationshipContactFrequencyDays: frequency,
+        nextRelationshipContactDueAt: addDays(anchor, frequency),
+      },
+    });
+  }
+
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients");
+  revalidatePath("/dashboard");
+}
+
+export async function recordClientRelationshipContact(formData: FormData) {
+  await requireRole(["admin", "team_member"]);
+
+  const clientId = String(formData.get("clientId") || "").trim();
+  if (!clientId) return;
+
+  const existing = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { relationshipContactFrequencyDays: true },
+  });
+  if (!existing) return;
+
+  const now = new Date();
+  await prisma.client.update({
+    where: { id: clientId },
+    data: {
+      lastRelationshipContactAt: now,
+      nextRelationshipContactDueAt:
+        existing.relationshipContactFrequencyDays && existing.relationshipContactFrequencyDays > 0
+          ? addDays(now, existing.relationshipContactFrequencyDays)
+          : null,
+    },
+  });
+
+  revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/clients");
+  revalidatePath("/dashboard");
+}
+
 export async function createServiceProduct(formData: FormData) {
   await requireRole(["admin"]);
 
