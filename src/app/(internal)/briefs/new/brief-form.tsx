@@ -6,7 +6,7 @@ import { createBrief } from "@/app/actions";
 type ClientOption = { id: string; name: string };
 type ScopeOption = { id: string; name: string; clientId: string };
 
-type BriefTypeUI = "web_design_dev" | "app_dev" | "video" | "photo" | "design" | "content";
+export type BriefTypeUI = "web_design_dev" | "app_dev" | "video" | "photo" | "design" | "content";
 
 function labelForType(t: BriefTypeUI) {
   switch (t) {
@@ -25,16 +25,32 @@ function labelForType(t: BriefTypeUI) {
   }
 }
 
-export function BriefForm(props: { clients: ClientOption[]; scopes: ScopeOption[] }) {
+export function BriefForm(props: {
+  clients: ClientOption[];
+  scopes: ScopeOption[];
+  initialClientId?: string | null;
+  fromWonLeadId?: string | null;
+  initialBriefType?: BriefTypeUI | null;
+  initialTitle?: string | null;
+  initialDescription?: string | null;
+}) {
   const [scopeId, setScopeId] = useState<string>("");
-  const [clientId, setClientId] = useState<string>(props.clients[0]?.id ?? "");
-  const [briefType, setBriefType] = useState<BriefTypeUI>("content");
+  const preferredClient =
+    props.initialClientId && props.clients.some((c) => c.id === props.initialClientId)
+      ? props.initialClientId
+      : (props.clients[0]?.id ?? "");
+  const [clientId, setClientId] = useState<string>(preferredClient);
+  const [briefType, setBriefType] = useState<BriefTypeUI>(props.initialBriefType ?? "content");
 
   useEffect(() => {
     if (props.clients.length === 0) return;
+    if (props.initialClientId && props.clients.some((c) => c.id === props.initialClientId)) {
+      setClientId(props.initialClientId);
+      return;
+    }
     const exists = props.clients.some((c) => c.id === clientId);
     if (!exists) setClientId(props.clients[0].id);
-  }, [props.clients, clientId]);
+  }, [props.clients, clientId, props.initialClientId]);
 
   // Type-specific fields
   const [videoLong, setVideoLong] = useState<number>(0);
@@ -67,6 +83,7 @@ export function BriefForm(props: { clients: ClientOption[]; scopes: ScopeOption[
 
   return (
     <form action={createBrief} className="space-y-4">
+      {props.fromWonLeadId ? <input type="hidden" name="fromWonLeadId" value={props.fromWonLeadId} /> : null}
       {/* Scope at top (optional) */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-900">Scope (optional)</label>
@@ -108,7 +125,13 @@ export function BriefForm(props: { clients: ClientOption[]; scopes: ScopeOption[
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium text-zinc-900">Brief title</label>
-          <input name="title" required placeholder="e.g. Spring landing page refresh" className="w-full" />
+          <input
+            name="title"
+            required
+            placeholder="e.g. Spring landing page refresh"
+            className="w-full"
+            defaultValue={props.initialTitle ?? ""}
+          />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium text-zinc-900">Urgency</label>
@@ -123,7 +146,13 @@ export function BriefForm(props: { clients: ClientOption[]; scopes: ScopeOption[
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-900">Short description</label>
-        <textarea name="description" required placeholder="High-level summary for internal + client context" className="w-full min-h-28 resize-none" />
+        <textarea
+          name="description"
+          required
+          placeholder="High-level summary for internal + client context"
+          className="w-full min-h-28 resize-none"
+          defaultValue={props.initialDescription ?? ""}
+        />
       </div>
 
       {/* Brief type */}

@@ -32,6 +32,16 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
+  /** Team members: no Sales / CRM / Clients / Business areas (nav + direct URLs). */
+  if (role === "team_member") {
+    const restricted = ["/crm", "/clients", "/services", "/reports"];
+    for (const prefix of restricted) {
+      if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+      }
+    }
+  }
+
   return NextResponse.next();
 }
 

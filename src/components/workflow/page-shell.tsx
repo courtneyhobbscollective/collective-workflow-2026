@@ -13,13 +13,15 @@ export function PageShell(
   }>
 ) {
   const header = (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{props.title}</h1>
-        {props.subtitle ? <div className="mt-1 text-sm text-zinc-500">{props.subtitle}</div> : null}
-        {props.headerExtra ? <div className="mt-2">{props.headerExtra}</div> : null}
+    <div className="space-y-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{props.title}</h1>
+          {props.subtitle ? <div className="mt-1 text-sm text-zinc-500">{props.subtitle}</div> : null}
+        </div>
+        {props.action ? <div className="flex shrink-0 items-center sm:pt-0.5">{props.action}</div> : null}
       </div>
-      {props.action ? <div className="flex shrink-0 items-center sm:pt-0.5">{props.action}</div> : null}
+      {props.headerExtra ? <div>{props.headerExtra}</div> : null}
     </div>
   );
 

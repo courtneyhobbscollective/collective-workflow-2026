@@ -16,10 +16,11 @@ export function UserHeaderBadge(props: {
   fullName: string;
   avatarUrl?: string | null;
   className?: string;
+  href?: string;
 }) {
   return (
     <Link
-      href="/settings/profile"
+      href={props.href ?? "/settings/profile"}
       className={cn(
         "group flex items-center gap-3 rounded-xl p-1.5 -m-1.5 transition-colors hover:bg-zinc-100/90",
         props.className

@@ -4,13 +4,20 @@ import { userIdsMentionedInText } from "@/lib/team-mentions";
 
 /** Workspace-wide channel; not tied to a client (`clientId` is null). */
 export const GENERAL_TEAM_CHANNEL_NAME = "🚀 General Chat";
+/** Workspace-wide leads reminder channel; not tied to a client (`clientId` is null). */
+export const LEADS_TEAM_CHANNEL_NAME = "🔔 Leads";
 
 export type TeamChannelNavRow = { id: string; name: string; clientId: string | null };
 
-/** General channel first, then client channels A–Z. */
+/** General chat first, then leads, then client channels A–Z. */
 export function sortTeamChannelsForNav<T extends { clientId: string | null; name: string }>(channels: T[]): T[] {
   return [...channels].sort((a, b) => {
-    const rank = (c: T) => (c.clientId === null ? 0 : 1);
+    const rank = (c: T) => {
+      if (c.clientId === null && c.name === GENERAL_TEAM_CHANNEL_NAME) return 0;
+      if (c.clientId === null && c.name === LEADS_TEAM_CHANNEL_NAME) return 1;
+      if (c.clientId === null) return 2; // fallback for legacy/orphan null channels
+      return 3;
+    };
     const r = rank(a) - rank(b);
     if (r !== 0) return r;
     return a.name.localeCompare(b.name);
@@ -32,10 +39,10 @@ async function syncInternalUsersToChannel(channelId: string) {
   }
 }
 
-/** Merge extra `clientId: null` channels into the oldest (messages + members), then delete duplicates. */
+/** Merge extra General Chat channels (legacy dupes), then delete duplicates. */
 async function mergeDuplicateGeneralTeamChannels() {
   const allGeneral = await prisma.teamChannel.findMany({
-    where: { clientId: null },
+    where: { clientId: null, name: GENERAL_TEAM_CHANNEL_NAME },
     orderBy: { createdAt: "asc" },
     select: { id: true },
   });
@@ -74,7 +81,7 @@ export async function ensureGeneralTeamChannel() {
   await mergeDuplicateGeneralTeamChannels();
 
   let channel = await prisma.teamChannel.findFirst({
-    where: { clientId: null },
+    where: { clientId: null, name: GENERAL_TEAM_CHANNEL_NAME },
     orderBy: { createdAt: "asc" },
   });
 
@@ -82,10 +89,22 @@ export async function ensureGeneralTeamChannel() {
     channel = await prisma.teamChannel.create({
       data: { name: GENERAL_TEAM_CHANNEL_NAME, clientId: null },
     });
-  } else if (channel.name !== GENERAL_TEAM_CHANNEL_NAME) {
-    channel = await prisma.teamChannel.update({
-      where: { id: channel.id },
-      data: { name: GENERAL_TEAM_CHANNEL_NAME },
+  }
+
+  await syncInternalUsersToChannel(channel.id);
+  return channel;
+}
+
+/** Single org-wide leads channel with `clientId: null`; all internal users are members. */
+export async function ensureLeadsTeamChannel() {
+  // Avoid clobbering General Chat: leads channel is also `clientId: null` but different name.
+  let channel = await prisma.teamChannel.findFirst({
+    where: { clientId: null, name: LEADS_TEAM_CHANNEL_NAME },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!channel) {
+    channel = await prisma.teamChannel.create({
+      data: { name: LEADS_TEAM_CHANNEL_NAME, clientId: null },
     });
   }
 
@@ -96,6 +115,7 @@ export async function ensureGeneralTeamChannel() {
 /** Ensure the general channel exists, every client has a team channel, and all internal users are members everywhere. */
 export async function ensureTeamChannelsForAllClients() {
   await ensureGeneralTeamChannel();
+  await ensureLeadsTeamChannel();
   const clients = await prisma.client.findMany({ select: { id: true } });
   for (const c of clients) {
     await ensureClientChannelWithMembers(c.id);

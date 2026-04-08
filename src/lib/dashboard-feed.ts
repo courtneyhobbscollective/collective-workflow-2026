@@ -10,6 +10,8 @@ export type DashboardFeedItem = {
   href: string | null;
   /** Derived for styling / filters */
   kind: "personal" | "team";
+  /** Semantic category for consistent dashboard colors. */
+  category: "calendar" | "crm" | "brief" | "comms" | "system";
   /** Mark notification read (personal rows). */
   notificationId?: string;
   /** Hide team row for this viewer only. */
@@ -18,6 +20,22 @@ export type DashboardFeedItem = {
 
 function formatBriefStatus(status: string) {
   return status.replace(/_/g, " ");
+}
+
+function categoryFromNotification(n: { title: string; body: string; href: string | null }): DashboardFeedItem["category"] {
+  const hay = `${n.title} ${n.body}`.toLowerCase();
+  const href = n.href ?? "";
+  if (href.startsWith("/calendar") || /\bcalendar\b|\bbooking\b|\bschedule\b/.test(hay)) return "calendar";
+  if (
+    href.startsWith("/crm") ||
+    href.startsWith("/clients") ||
+    /\blead\b|\bfollow[\s-]?up\b|\bcrm\b|\bcheck[-\s]?in\b|\bclient request\b/.test(hay)
+  ) {
+    return "crm";
+  }
+  if (href.startsWith("/messages") || /\bdm\b|\bmention\b|\bmessage\b|\bchat\b/.test(hay)) return "comms";
+  if (href.startsWith("/briefs") || /\bbrief\b|\bdeliverable\b|\breview\b|\bamends?\b/.test(hay)) return "brief";
+  return "system";
 }
 
 function activityToFeedItem(log: {
@@ -38,6 +56,7 @@ function activityToFeedItem(log: {
     activityLogId: log.id,
     createdAt: log.createdAt,
     kind: "team" as const,
+    category: "brief" as const,
   };
 
   switch (log.action) {
@@ -151,6 +170,7 @@ export async function getDashboardFeedForViewer(userId: string | null, take = 20
     body: n.body,
     href: n.href ?? null,
     kind: "personal",
+    category: categoryFromNotification({ title: n.title, body: n.body, href: n.href ?? null }),
   }));
 
   const fromActivity: DashboardFeedItem[] = [];

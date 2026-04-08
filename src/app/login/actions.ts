@@ -3,22 +3,47 @@
 import { UserRole } from "@prisma/client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
-export async function loginAsRole(role: UserRole) {
+/** Sets session cookies for an existing user. Throws if the user does not exist. */
+async function establishSessionForUser(userId: string): Promise<{ role: UserRole }> {
   const cookieStore = await cookies();
-  cookieStore.set("workflow_role", role, { httpOnly: true, path: "/" });
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error("USER_NOT_FOUND");
+  }
+  cookieStore.set("workflow_role", user.role, { httpOnly: true, path: "/" });
+  cookieStore.set("workflow_user_id", user.id, { httpOnly: true, path: "/" });
+  return { role: user.role };
+}
 
-  // Login should not fail if the DB is temporarily unreachable.
-  // Downstream pages will still require a working DB for data.
-  try {
-    const user = await prisma.user.findFirst({ where: { role } });
-    if (user) cookieStore.set("workflow_user_id", user.id, { httpOnly: true, path: "/" });
-  } catch {
-    // Intentionally swallow to avoid crashing login when Postgres isn't up/migrated yet.
+export async function loginWithPassword(formData: FormData) {
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) {
+    redirect("/login?error=password");
   }
 
-  if (role === "client") {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user?.passwordHash) {
+    redirect("/login?error=password");
+  }
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) {
+    redirect("/login?error=password");
+  }
+
+  try {
+    await establishSessionForUser(user.id);
+  } catch {
+    redirect("/login?error=password");
+  }
+
+  if (user.role === "client") {
     redirect("/portal");
   }
   redirect("/dashboard");

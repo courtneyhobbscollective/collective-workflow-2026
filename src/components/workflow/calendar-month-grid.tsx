@@ -29,6 +29,8 @@ export type CalendarBookingLite = {
   endsAt: string;
   bookingType: BookingType;
   briefId: string | null;
+  /** Assignee; used for stable per-user calendar colours. */
+  userId: string | null;
   visibleToClient: boolean;
   userName: string | null;
   assigneeAvatarUrl: string | null;
@@ -43,6 +45,53 @@ function localDateKey(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Every local calendar day from the start of `startsAt` through the end of `endsAt` (inclusive). */
+function localDateKeysSpanningRange(startsAtIso: string, endsAtIso: string): string[] {
+  const start = new Date(startsAtIso);
+  const end = new Date(endsAtIso);
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  if (endDay < startDay) return [localDateKey(start)];
+  const keys: string[] = [];
+  const cur = new Date(startDay);
+  while (cur <= endDay) {
+    keys.push(localDateKey(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return keys;
+}
+
+type Cell = { kind: "out"; day: number } | { kind: "in"; day: number; dateKey: string };
+
+function isMultiDayBooking(b: CalendarBookingLite): boolean {
+  return localDateKeysSpanningRange(b.startsAt, b.endsAt).length > 1;
+}
+
+function chunkMatrixToWeeks(matrix: Cell[]): Cell[][] {
+  const weeks: Cell[][] = [];
+  for (let i = 0; i < matrix.length; i += 7) {
+    weeks.push(matrix.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+/** Columns (0–6) this booking covers within this Sun–Sat week row. */
+function multiDaySegmentInWeek(weekCells: Cell[], b: CalendarBookingLite): { colStart: number; colSpan: number } | null {
+  if (!isMultiDayBooking(b)) return null;
+  const keys = new Set(localDateKeysSpanningRange(b.startsAt, b.endsAt));
+  let minCol = -1;
+  let maxCol = -1;
+  for (let i = 0; i < 7; i++) {
+    const c = weekCells[i];
+    if (c.kind !== "in") continue;
+    if (!keys.has(c.dateKey)) continue;
+    if (minCol === -1) minCol = i;
+    maxCol = i;
+  }
+  if (minCol === -1) return null;
+  return { colStart: minCol, colSpan: maxCol - minCol + 1 };
 }
 
 function formatBookingType(t: BookingType): string {
@@ -60,6 +109,56 @@ function formatDayDate(iso: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** Stable hash so each user id maps to a consistent palette slot. */
+function hashUserId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/** Tailwind classes for booking chips/bars — one hue per assignee (cycles for many users). */
+const CAL_ASSIGNEE_CHIP = [
+  "bg-sky-100 text-sky-950 ring-sky-300/80",
+  "bg-violet-100 text-violet-950 ring-violet-300/80",
+  "bg-amber-100 text-amber-950 ring-amber-300/80",
+  "bg-emerald-100 text-emerald-950 ring-emerald-300/80",
+  "bg-rose-100 text-rose-950 ring-rose-300/80",
+  "bg-cyan-100 text-cyan-950 ring-cyan-300/80",
+  "bg-fuchsia-100 text-fuchsia-950 ring-fuchsia-300/80",
+  "bg-lime-100 text-lime-950 ring-lime-300/80",
+  "bg-orange-100 text-orange-950 ring-orange-300/80",
+  "bg-indigo-100 text-indigo-950 ring-indigo-300/80",
+  "bg-teal-100 text-teal-950 ring-teal-300/80",
+  "bg-pink-100 text-pink-950 ring-pink-300/80",
+] as const;
+
+const CAL_ASSIGNEE_BORDER = [
+  "border-l-[3px] border-l-sky-400",
+  "border-l-[3px] border-l-violet-400",
+  "border-l-[3px] border-l-amber-400",
+  "border-l-[3px] border-l-emerald-400",
+  "border-l-[3px] border-l-rose-400",
+  "border-l-[3px] border-l-cyan-400",
+  "border-l-[3px] border-l-fuchsia-400",
+  "border-l-[3px] border-l-lime-500",
+  "border-l-[3px] border-l-orange-400",
+  "border-l-[3px] border-l-indigo-400",
+  "border-l-[3px] border-l-teal-400",
+  "border-l-[3px] border-l-pink-400",
+] as const;
+
+export function calendarAssigneeChipClasses(userId: string | null): string {
+  if (!userId) return "bg-zinc-100 text-zinc-700 ring-zinc-300/70";
+  const i = hashUserId(userId) % CAL_ASSIGNEE_CHIP.length;
+  return CAL_ASSIGNEE_CHIP[i];
+}
+
+function calendarAssigneeBorderClass(userId: string | null): string {
+  if (!userId) return "border-l-[3px] border-l-zinc-400";
+  const i = hashUserId(userId) % CAL_ASSIGNEE_BORDER.length;
+  return CAL_ASSIGNEE_BORDER[i];
 }
 
 function assigneeInitials(fullName: string) {
@@ -104,8 +203,6 @@ function AssigneeFace({
     </div>
   );
 }
-
-type Cell = { kind: "out"; day: number } | { kind: "in"; day: number; dateKey: string };
 
 function buildMonthMatrix(year: number, month: number): Cell[] {
   const first = new Date(year, month, 1);
@@ -195,9 +292,7 @@ function DayCell({
               onClick={() => onSelectBooking(b)}
               className={cn(
                 "w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight ring-1 transition hover:brightness-95",
-                b.isMine
-                  ? "bg-sky-50 text-sky-900 ring-sky-200/80"
-                  : "bg-zinc-50 text-zinc-800 ring-zinc-200/70"
+                calendarAssigneeChipClasses(b.userId)
               )}
             >
               {b.title}
@@ -416,7 +511,10 @@ function DayOverflowModal({
                   onClose();
                   onSelectBooking(b);
                 }}
-                className="flex w-full flex-col gap-0.5 rounded-xl px-3 py-3 text-left text-sm transition hover:bg-zinc-50"
+                className={cn(
+                  "flex w-full flex-col gap-0.5 rounded-xl py-3 pl-3 pr-3 text-left text-sm transition hover:bg-zinc-50",
+                  calendarAssigneeBorderClass(b.userId)
+                )}
               >
                 <span className="font-semibold text-zinc-900">{b.title}</span>
                 <span className="text-xs text-zinc-500">
@@ -467,11 +565,12 @@ export function CalendarMonthGrid({
     return bookings;
   }, [bookings, scope, viewerId]);
 
+  /** Single-calendar-day bookings only (multi-day are shown as week span bars). */
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarBookingLite[]>();
     for (const b of visibleBookings) {
-      const d = new Date(b.startsAt);
-      const key = localDateKey(d);
+      if (isMultiDayBooking(b)) continue;
+      const key = localDateKey(new Date(b.startsAt));
       const arr = map.get(key) ?? [];
       arr.push(b);
       map.set(key, arr);
@@ -483,7 +582,21 @@ export function CalendarMonthGrid({
   }, [visibleBookings]);
 
   const matrix = useMemo(() => buildMonthMatrix(cursor.year, cursor.month), [cursor.year, cursor.month]);
-  const dayRows = matrix.length / 7;
+  const weeks = useMemo(() => chunkMatrixToWeeks(matrix), [matrix]);
+  const dayRows = weeks.length;
+
+  const multiDaySegmentsByWeek = useMemo(() => {
+    return weeks.map((weekCells) => {
+      const segs: { booking: CalendarBookingLite; colStart: number; colSpan: number }[] = [];
+      for (const b of visibleBookings) {
+        if (!isMultiDayBooking(b)) continue;
+        const seg = multiDaySegmentInWeek(weekCells, b);
+        if (seg) segs.push({ booking: b, ...seg });
+      }
+      segs.sort((a, b) => new Date(a.booking.startsAt).getTime() - new Date(b.booking.startsAt).getTime());
+      return segs;
+    });
+  }, [weeks, visibleBookings]);
 
   const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleDateString(undefined, {
     month: "long",
@@ -566,36 +679,71 @@ export function CalendarMonthGrid({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-200/80">
-        {WEEKDAYS.map((d, col) => (
-          <div
-            key={d}
-            className={cn(
-              "bg-zinc-50 px-1 py-2 text-center text-[11px] font-medium uppercase tracking-wide text-zinc-500",
-              col === 0 && "rounded-tl-xl",
-              col === 6 && "rounded-tr-xl"
-            )}
-          >
-            {d}
-          </div>
-        ))}
-        {matrix.map((cell, i) => {
-          const row = Math.floor(i / 7);
-          const col = i % 7;
+      <div className="overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-200/80">
+        <div className="grid grid-cols-7 gap-px">
+          {WEEKDAYS.map((d, col) => (
+            <div
+              key={d}
+              className={cn(
+                "bg-zinc-50 px-1 py-2 text-center text-[11px] font-medium uppercase tracking-wide text-zinc-500",
+                col === 0 && "rounded-tl-xl",
+                col === 6 && "rounded-tr-xl"
+              )}
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+        {weeks.map((weekCells, weekIdx) => {
+          const segments = multiDaySegmentsByWeek[weekIdx] ?? [];
           return (
-            <DayCell
-              key={i}
-              cell={cell}
-              todayKey={todayKey}
-              cornerClass={cellCornerClass(row, col, dayRows)}
-              list={cell.kind === "in" ? (byDay.get(cell.dateKey) ?? []) : []}
-              onSelectBooking={setDetailBooking}
-              onShowDayOverflow={(dateKey, list) => setOverflowDay({ dateKey, bookings: list })}
-            />
+            <div key={weekIdx}>
+              <div
+                className={cn(
+                  "border-b border-zinc-200/80 bg-zinc-50/90 px-px",
+                  segments.length === 0 && "min-h-[3px]"
+                )}
+              >
+                {segments.map((seg) => (
+                  <div key={`${seg.booking.id}-w${weekIdx}`} className="grid grid-cols-7 gap-px py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setDetailBooking(seg.booking)}
+                      style={{ gridColumn: `${seg.colStart + 1} / span ${seg.colSpan}` }}
+                      className={cn(
+                        "min-h-[1.125rem] truncate rounded px-1.5 py-0.5 text-left text-[10px] font-medium leading-tight ring-1 transition hover:brightness-95",
+                        calendarAssigneeChipClasses(seg.booking.userId)
+                      )}
+                      title={seg.booking.title}
+                    >
+                      {seg.booking.title}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-px">
+                {weekCells.map((cell, col) => {
+                  const i = weekIdx * 7 + col;
+                  return (
+                    <DayCell
+                      key={i}
+                      cell={cell}
+                      todayKey={todayKey}
+                      cornerClass={cellCornerClass(weekIdx, col, dayRows)}
+                      list={cell.kind === "in" ? (byDay.get(cell.dateKey) ?? []) : []}
+                      onSelectBooking={setDetailBooking}
+                      onShowDayOverflow={(dateKey, list) => setOverflowDay({ dateKey, bookings: list })}
+                    />
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </div>
-      <p className="text-xs text-zinc-500">Grouped by start date (local time). Click a booking for details.</p>
+      <p className="text-xs text-zinc-500">
+        Colours match the assigned team member (consistent per person). Multi-day bookings span the week row; single-day items sit under each date. Click for details.
+      </p>
 
       {detailBooking ? (
         <BookingDetailModal booking={detailBooking} onClose={() => setDetailBooking(null)} />

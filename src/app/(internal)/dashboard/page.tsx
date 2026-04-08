@@ -1,96 +1,23 @@
-import { Card } from "@/components/ui";
+import { Badge, Card } from "@/components/ui";
 import { PageShell } from "@/components/workflow/page-shell";
+import { HeaderMessagesIndicator } from "@/components/workflow/header-messages-indicator";
 import { UserHeaderBadge } from "@/components/workflow/user-header-badge";
-import { ScopePill } from "@/components/workflow/status-pill";
 import {
   countUnreadNotifications,
   getDashboardFeedForViewer,
-  type DashboardFeedItem,
 } from "@/lib/dashboard-feed";
-import { ClearNotificationsButton, DismissFeedItemButton } from "@/components/workflow/dashboard-notification-actions";
+import { DashboardFeedCollapsed } from "@/components/workflow/dashboard-feed-collapsed";
+import { DashboardAssignedWorkCollapsed } from "@/components/workflow/dashboard-assigned-work-collapsed";
+import { DashboardCalendarSnapshotCollapsed } from "@/components/workflow/dashboard-calendar-snapshot-collapsed";
+import { ClearNotificationsButton } from "@/components/workflow/dashboard-notification-actions";
 import { getSessionRole, getSessionUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  PIPELINE_BRIEF_STATUS_FILTER,
-  SCOPE_NEEDS_ATTENTION,
-  SCOPE_STATUS_SUMMARY_ORDER,
-} from "@/lib/workflow/scope-health";
+import { LIVE_WORK_PAGE_STATUSES } from "@/lib/workflow/live-work-page-statuses";
 import { ensureLeadFollowUpReminders } from "@/lib/crm/lead-follow-up-reminders";
 import { ensureRelationshipContactReminders } from "@/lib/crm/relationship-reminders";
-import type { ScopeStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
-import { Activity, Bell, Building2, CalendarClock, ChevronRight, ClipboardList, Layers, UserPlus, Users } from "lucide-react";
+import { Building2, CalendarClock, ClipboardList, Layers, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
-
-function formatFeedTime(d: Date) {
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function DashboardFeedRow({ item, dismissSlot }: { item: DashboardFeedItem; dismissSlot: ReactNode }) {
-  const isPersonal = item.kind === "personal";
-  const mainClass = cn(
-    "group flex min-w-0 flex-1 items-start gap-3.5 px-4 py-3.5 sm:px-5 sm:py-4",
-    item.href ? "transition-colors hover:bg-zinc-50/90" : ""
-  );
-
-  const mainInner = (
-    <>
-      <div
-        className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
-          isPersonal
-            ? "bg-sky-50 text-sky-700 ring-sky-200/60"
-            : "bg-zinc-100 text-zinc-600 ring-zinc-200/80"
-        )}
-        aria-hidden
-      >
-        {isPersonal ? <Bell className="h-[18px] w-[18px]" strokeWidth={2} /> : <Activity className="h-[18px] w-[18px]" strokeWidth={2} />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2 gap-y-1">
-          <span
-            className={cn(
-              "rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-              isPersonal ? "bg-sky-100/90 text-sky-900" : "bg-zinc-200/70 text-zinc-700"
-            )}
-          >
-            {isPersonal ? "For you" : "Team"}
-          </span>
-          <h3 className="text-sm font-semibold leading-snug text-zinc-900">{item.title}</h3>
-        </div>
-        <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{item.body}</p>
-        <p className="mt-2 text-[11px] font-medium tabular-nums text-zinc-400">{formatFeedTime(item.createdAt)}</p>
-      </div>
-      {item.href ? (
-        <ChevronRight
-          className="mt-1 h-4 w-4 shrink-0 text-zinc-300 transition-colors group-hover:text-zinc-500"
-          aria-hidden
-        />
-      ) : (
-        <span className="w-4 shrink-0" aria-hidden />
-      )}
-    </>
-  );
-
-  return (
-    <div className="flex items-stretch">
-      {item.href ? (
-        <Link href={item.href} className={mainClass} aria-label={`Open: ${item.title}`}>
-          {mainInner}
-        </Link>
-      ) : (
-        <div className={mainClass}>{mainInner}</div>
-      )}
-      <div className="flex shrink-0 items-start py-3 pr-2 pt-3.5 sm:py-4 sm:pr-3 sm:pt-4">{dismissSlot}</div>
-    </div>
-  );
-}
 
 type AdminCrmStanding = {
   openLeadsCount: number;
@@ -99,6 +26,13 @@ type AdminCrmStanding = {
   clientsPreview: { id: string; name: string }[];
   checkInsPreview: { id: string; name: string; nextRelationshipContactDueAt: Date | null }[];
 };
+
+type AdminPendingOnboarding = {
+  count: number;
+  preview: { id: string; companyName: string; fullName: string; createdAt: Date }[];
+} | null;
+
+const ACTIVE_LIVE_WORK_STATUSES = LIVE_WORK_PAGE_STATUSES.filter((s) => s !== "completed");
 
 export default async function DashboardPage() {
   const [userId, role] = await Promise.all([getSessionUserId(), getSessionRole()]);
@@ -114,8 +48,9 @@ export default async function DashboardPage() {
     feed,
     sessionUser,
     unreadNotificationCount,
-    scopeSummaryGroup,
-    scopeAttentionBriefs,
+    unreadChatCount,
+    assignedLiveWorkBriefs,
+    myUpcomingBookings,
   ] = await Promise.all([
     prisma.brief.count({ where: { status: { not: "completed" } } }),
     prisma.client.count(),
@@ -130,31 +65,58 @@ export default async function DashboardPage() {
     getDashboardFeedForViewer(userId, 20),
     userId ? prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, avatarUrl: true } }) : null,
     userId ? countUnreadNotifications(userId) : Promise.resolve(0),
-    prisma.brief.groupBy({
-      by: ["scopeStatus"],
-      where: PIPELINE_BRIEF_STATUS_FILTER,
-      _count: { _all: true },
-    }),
-    prisma.brief.findMany({
-      where: {
-        ...PIPELINE_BRIEF_STATUS_FILTER,
-        scopeStatus: { in: SCOPE_NEEDS_ATTENTION },
-      },
-      orderBy: { deadline: "asc" },
-      take: 8,
-      select: {
-        id: true,
-        title: true,
-        deadline: true,
-        scopeStatus: true,
-        client: { select: { name: true } },
-      },
-    }),
+    userId
+      ? prisma.notification.count({
+          where: {
+            userId,
+            readAt: null,
+            href: { contains: "/messages" },
+          },
+        })
+      : Promise.resolve(0),
+    userId
+      ? prisma.briefAssignment.findMany({
+          where: {
+            userId,
+            brief: { status: { in: ACTIVE_LIVE_WORK_STATUSES } },
+          },
+          orderBy: { brief: { deadline: "asc" } },
+          take: 25,
+          select: {
+            brief: {
+              select: {
+                id: true,
+                title: true,
+                deadline: true,
+                status: true,
+                client: { select: { name: true } },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    userId
+      ? prisma.calendarBooking.findMany({
+          where: { userId, endsAt: { gte: now } },
+          orderBy: { startsAt: "asc" },
+          take: 25,
+          select: {
+            id: true,
+            title: true,
+            bookingType: true,
+            startsAt: true,
+            endsAt: true,
+            brief: { select: { id: true, title: true } },
+            client: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   let adminCrmStanding: AdminCrmStanding | null = null;
+  let adminPendingOnboarding: AdminPendingOnboarding = null;
   if (role === "admin") {
-    const [openLeadsCount, activeClientsCount, leadsPreview, clientsPreview, checkInsPreview] =
+    const [openLeadsCount, activeClientsCount, leadsPreview, clientsPreview, checkInsPreview, onboardingCount, onboardingPreview] =
       await Promise.all([
         prisma.lead.count({
           where: { convertedClientId: null, status: { notIn: ["won", "lost"] } },
@@ -182,6 +144,13 @@ export default async function DashboardPage() {
           take: 5,
           select: { id: true, name: true, nextRelationshipContactDueAt: true },
         }),
+        prisma.pendingClientSignup.count({ where: { status: "pending" } }),
+        prisma.pendingClientSignup.findMany({
+          where: { status: "pending" },
+          orderBy: { createdAt: "asc" },
+          take: 3,
+          select: { id: true, companyName: true, fullName: true, createdAt: true },
+        }),
       ]);
     adminCrmStanding = {
       openLeadsCount,
@@ -190,32 +159,81 @@ export default async function DashboardPage() {
       clientsPreview,
       checkInsPreview,
     };
+    adminPendingOnboarding = { count: onboardingCount, preview: onboardingPreview };
   }
 
-  const scopeCounts: Record<ScopeStatus, number> = {
-    in_scope: 0,
-    watch_scope: 0,
-    out_of_scope: 0,
-    awaiting_admin_review: 0,
-  };
-  for (const row of scopeSummaryGroup) {
-    const c = row._count;
-    const n =
-      typeof c === "object" && c !== null && "_all" in c && typeof (c as { _all: unknown })._all === "number"
-        ? (c as { _all: number })._all
-        : 0;
-    scopeCounts[row.scopeStatus] = n;
-  }
+  const feedItems = feed.map((item) => ({
+    id: item.id,
+    createdAtIso: item.createdAt.toISOString(),
+    title: item.title,
+    body: item.body,
+    href: item.href,
+    kind: item.kind,
+    category: item.category,
+    notificationId: item.notificationId,
+    activityLogId: item.activityLogId,
+  }));
+  const feedShownCount = Math.min(feedItems.length, 3);
+  const assignedWorkItems = assignedLiveWorkBriefs.map((row) => ({
+    id: row.brief.id,
+    title: row.brief.title,
+    clientName: row.brief.client.name,
+    deadlineIso: row.brief.deadline.toISOString(),
+    href: `/briefs/${row.brief.id}`,
+    status: row.brief.status,
+  }));
+  const calendarSnapshotItems = myUpcomingBookings.map((b) => ({
+    id: b.id,
+    title: b.title,
+    context: b.brief?.title ?? b.client?.name ?? "General booking",
+    startsAtIso: b.startsAt.toISOString(),
+    bookingType: b.bookingType,
+  }));
+
   return (
     <PageShell
       title="Dashboard"
       subtitle="Production work management at a glance"
       action={
         sessionUser ? (
-          <UserHeaderBadge fullName={sessionUser.fullName} avatarUrl={sessionUser.avatarUrl} />
+          <div className="flex items-center gap-2">
+            <HeaderMessagesIndicator href="/messages" unreadCount={unreadChatCount} />
+            <UserHeaderBadge fullName={sessionUser.fullName} avatarUrl={sessionUser.avatarUrl} />
+          </div>
         ) : null
       }
     >
+      {adminPendingOnboarding && adminPendingOnboarding.count > 0 ? (
+        <Card className="border-amber-200/90 bg-amber-50/50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {adminPendingOnboarding.count} pending client onboarding request
+                {adminPendingOnboarding.count > 1 ? "s" : ""}
+              </p>
+              <p className="mt-1 text-xs text-amber-800/90">
+                Review and approve/reject from Users → Pending client onboarding.
+              </p>
+              {adminPendingOnboarding.preview.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-xs text-amber-900/90">
+                  {adminPendingOnboarding.preview.map((r) => (
+                    <li key={r.id}>
+                      {r.companyName} · {r.fullName} · {r.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+            <Link
+              href="/settings/users"
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100/60"
+            >
+              Open users
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
       {adminCrmStanding ? (
         <Card className="overflow-hidden border-zinc-200/90 p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50/80 px-4 py-2.5 sm:px-5">
@@ -427,7 +445,12 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <div className="mb-4">
-            <h2 className="text-base font-medium text-zinc-900">Activity & notifications</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-medium text-zinc-900">Activity & notifications</h2>
+              <Badge className="bg-zinc-100 text-zinc-700">
+                {feedShownCount} shown · {feedItems.length} total
+              </Badge>
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
               <p className="min-w-0 flex-1 text-sm leading-snug text-zinc-500">
                 Brief updates for the team, plus DMs, mentions, and alerts for you
@@ -436,23 +459,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           {feed.length ? (
-            <div className="overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <ul className="divide-y divide-zinc-100">
-                {feed.map((item) => (
-                  <li key={item.id}>
-                    <DashboardFeedRow
-                      item={item}
-                      dismissSlot={
-                        <DismissFeedItemButton
-                          notificationId={item.notificationId}
-                          activityLogId={item.activityLogId}
-                        />
-                      }
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <DashboardFeedCollapsed items={feedItems} />
           ) : (
             <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 px-5 py-10 text-center">
               <p className="text-sm text-zinc-600">
@@ -463,67 +470,30 @@ export default async function DashboardPage() {
         </Card>
 
         <Card className="p-5">
-          <h2 className="text-base font-medium text-zinc-900">Scope health</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Counts are for active pipeline briefs only (excludes completed and archived). Advisory cues—not billing.
-          </p>
-
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {SCOPE_STATUS_SUMMARY_ORDER.map((status) => (
-              <Link
-                key={status}
-                href={`/briefs?scope=${status}`}
-                className="flex flex-col items-center gap-2 rounded-xl border border-zinc-200/90 bg-zinc-50/80 px-2 py-3 text-center transition-colors hover:border-zinc-300 hover:bg-zinc-100/90"
-              >
-                <span className="text-2xl font-semibold tabular-nums text-zinc-900">{scopeCounts[status]}</span>
-                <ScopePill scopeStatus={status} />
-              </Link>
-            ))}
+          <div>
+            <h2 className="text-base font-medium text-zinc-900">Calendar snapshot</h2>
+            <p className="mt-1 text-sm text-zinc-500">Your upcoming bookings and current assigned work.</p>
           </div>
 
-          <div className="mt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Needs attention</h3>
-            <p className="mt-1 text-xs text-zinc-500">
-              Watch scope, out of scope, or awaiting admin review — soonest deadlines first.
-            </p>
-            {scopeAttentionBriefs.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-600">Nothing flagged right now.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {scopeAttentionBriefs.map((b) => (
-                  <li key={b.id}>
-                    <Link
-                      href={`/briefs/${b.id}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-zinc-200 hover:bg-zinc-50/90"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-zinc-900">{b.title}</p>
-                        <p className="truncate text-xs text-zinc-500">{b.client.name}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <ScopePill scopeStatus={b.scopeStatus} />
-                        <span className="text-[11px] tabular-nums text-zinc-400">
-                          {new Date(b.deadline).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="mt-4">
+            <DashboardCalendarSnapshotCollapsed items={calendarSnapshotItems} />
+            <div className="mt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Assigned Work</h3>
+              <DashboardAssignedWorkCollapsed items={assignedWorkItems} />
+            </div>
             <p className="mt-4 text-sm text-zinc-600">
               <Link
-                href="/briefs"
+                href="/calendar"
                 className="font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
               >
-                All briefs
+                Open full calendar
               </Link>
               <span className="text-zinc-300"> · </span>
               <Link
-                href="/briefs?scope=watch_scope"
+                href="/live-work"
                 className="font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
               >
-                Watch scope list
+                Open live work
               </Link>
             </p>
           </div>

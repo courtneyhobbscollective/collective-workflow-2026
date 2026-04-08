@@ -39,6 +39,7 @@ export default async function CalendarPage() {
     endsAt: b.endsAt.toISOString(),
     bookingType: b.bookingType,
     briefId: b.briefId,
+    userId: b.userId,
     visibleToClient: b.visibleToClient,
     userName: b.user?.fullName ?? null,
     assigneeAvatarUrl: b.user?.avatarUrl ?? null,

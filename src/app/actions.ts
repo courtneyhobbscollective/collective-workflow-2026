@@ -37,6 +37,22 @@ function safeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+/** Optional FK from FormData. Missing keys must become `null`, not the string `"null"` (`String(null)` is wrong). */
+function formDataOptionalId(formData: FormData, key: string): string | null {
+  const v = formData.get(key);
+  if (v == null) return null;
+  const s = typeof v === "string" ? v.trim() : String(v).trim();
+  if (s === "" || s === "null" || s === "undefined") return null;
+  return s;
+}
+
+function mergeLeadSnapshot(quoteSnapshot: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+  const base = quoteSnapshot && typeof quoteSnapshot === "object" && !Array.isArray(quoteSnapshot)
+    ? { ...(quoteSnapshot as Record<string, unknown>) }
+    : {};
+  return { ...base, ...patch };
+}
+
 function parseClientEngagementType(formData: FormData): ClientEngagementType {
   const raw = String(formData.get("engagementType") || "project");
   return raw === "retainer" ? "retainer" : "project";
@@ -154,6 +170,28 @@ export async function createClient(formData: FormData) {
     clientId: created.id,
   });
   revalidatePath("/clients");
+
+  const fromWonLeadId = String(formData.get("fromWonLeadId") ?? "").trim();
+  if (fromWonLeadId) {
+    const wonLead = await prisma.lead.findUnique({
+      where: { id: fromWonLeadId },
+      select: { id: true, status: true },
+    });
+    if (wonLead?.status === "won") {
+      const taken = await prisma.lead.findFirst({
+        where: { convertedClientId: created.id, NOT: { id: fromWonLeadId } },
+        select: { id: true },
+      });
+      if (!taken) {
+        await prisma.lead.update({
+          where: { id: fromWonLeadId },
+          data: { convertedClientId: created.id },
+        });
+      }
+    }
+    revalidatePath("/crm/leads");
+    redirect(`/briefs/new?clientId=${encodeURIComponent(created.id)}&fromWonLead=${encodeURIComponent(fromWonLeadId)}`);
+  }
 }
 
 export async function updateClient(formData: FormData) {
@@ -578,6 +616,28 @@ export async function createBrief(formData: FormData) {
         }));
       }
     }
+  } else {
+    const rawType = String(formData.get("briefType") || "").trim();
+    if (rawType && (Object.values(BriefType) as string[]).includes(rawType)) {
+      briefType = rawType as BriefType;
+    }
+    try {
+      const td = formData.get("typeDetails");
+      if (typeof td === "string" && td) typeDetails = JSON.parse(td);
+    } catch {
+      typeDetails = null;
+    }
+  }
+
+  const fromWonLeadId = String(formData.get("fromWonLeadId") ?? "").trim();
+
+  let wonLeadSnapshot: unknown = null;
+  if (fromWonLeadId) {
+    const wonLead = await prisma.lead.findUnique({
+      where: { id: fromWonLeadId },
+      select: { id: true, status: true, quoteSnapshot: true },
+    });
+    if (wonLead?.status === "won") wonLeadSnapshot = wonLead.quoteSnapshot;
   }
 
   const brief = await prisma.brief.create({
@@ -620,9 +680,29 @@ export async function createBrief(formData: FormData) {
       },
     });
   }
+  if (fromWonLeadId && wonLeadSnapshot != null) {
+    const taken = await prisma.lead.findFirst({
+      where: { convertedClientId: brief.clientId, NOT: { id: fromWonLeadId } },
+      select: { id: true },
+    });
+
+    await prisma.lead.update({
+      where: { id: fromWonLeadId },
+      data: {
+        ...(taken ? {} : { convertedClientId: brief.clientId }),
+        quoteSnapshot: mergeLeadSnapshot(wonLeadSnapshot, {
+          convertedAt: new Date().toISOString(),
+          convertedBriefId: brief.id,
+          convertedClientId: brief.clientId,
+        }) as never,
+      },
+    });
+  }
+
   revalidatePath("/briefs");
   revalidatePath("/dashboard");
   revalidatePath(`/clients/${brief.clientId}`);
+  if (fromWonLeadId) revalidatePath("/crm/leads");
   const creator = await actorDisplayName();
   const clientRow = await prisma.client.findUnique({ where: { id: brief.clientId }, select: { name: true } });
   await postTeamTaskSummary(
@@ -1141,14 +1221,24 @@ export async function addMessage(formData: FormData) {
       body: String(formData.get("body"))
     }
   });
-  revalidatePath(`/briefs/${String(formData.get("briefId"))}`);
+  const briefId = String(formData.get("briefId"));
+  revalidatePath(`/briefs/${briefId}`);
+  revalidatePath(`/portal/briefs/${briefId}`);
 }
 
 export async function createBooking(formData: FormData) {
+  await requireRole(["admin", "team_member"]);
+  const briefId = formDataOptionalId(formData, "briefId");
+  const clientId = formDataOptionalId(formData, "clientId");
+  const sessionUserId = await getSessionUserId();
+  /** Fallback when `workflow_user_id` is missing in the server-action request; hidden field mirrors the server-rendered viewer id. */
+  const hintedUserId = formDataOptionalId(formData, "viewerUserId");
+  const userId = sessionUserId ?? hintedUserId ?? null;
   await prisma.calendarBooking.create({
     data: {
-      briefId: String(formData.get("briefId")) || null,
-      clientId: String(formData.get("clientId")) || null,
+      briefId,
+      clientId,
+      userId: userId ?? undefined,
       bookingType: "internal",
       title: String(formData.get("title")),
       startsAt: new Date(String(formData.get("startsAt"))),
@@ -1410,6 +1500,98 @@ export async function updateTeamProfile(formData: FormData): Promise<UpdateTeamP
 
   revalidatePath("/dashboard");
   revalidatePath("/settings/profile");
+  return { ok: true };
+}
+
+export async function updateClientProfile(formData: FormData): Promise<UpdateTeamProfileResult> {
+  await requireRole(["client"]);
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+
+  const fullName = String(formData.get("fullName") || "").trim();
+  const emailRaw = String(formData.get("email") || "").trim();
+  const email = emailRaw.toLowerCase();
+  const phoneNumber = String(formData.get("phoneNumber") || "").trim() || null;
+
+  if (!fullName) {
+    return { ok: false, error: "Please enter your name." };
+  }
+  if (!email) {
+    return { ok: false, error: "Please enter your email." };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: "Please enter a valid email address." };
+  }
+
+  const emailTaken = await prisma.user.findFirst({
+    where: { email, NOT: { id: userId } },
+    select: { id: true },
+  });
+  if (emailTaken) {
+    return { ok: false, error: "That email is already used by another account." };
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { avatarUrl: true },
+  });
+  if (!existing) {
+    return { ok: false, error: "Account not found." };
+  }
+
+  let nextAvatarUrl: string | undefined;
+  const file = formData.get("avatar");
+  if (file && typeof (file as File).arrayBuffer === "function") {
+    const f = file as File;
+    if (f.size > 0) {
+      if (f.size > MAX_AVATAR_BYTES) {
+        return { ok: false, error: "Image must be 2MB or smaller." };
+      }
+      const mime = f.type || "";
+      if (!ALLOWED_AVATAR_MIME.has(mime)) {
+        return { ok: false, error: "Use a JPEG, PNG, WebP, or GIF image." };
+      }
+
+      const ext =
+        mime === "image/jpeg" ? "jpg" : mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "gif";
+      const dir = path.join(process.cwd(), "public", "uploads", "users", userId);
+      fs.mkdirSync(dir, { recursive: true });
+      const fileName = `avatar-${Date.now()}.${ext}`;
+      const absPath = path.join(dir, fileName);
+      const bytes = Buffer.from(await f.arrayBuffer());
+      fs.writeFileSync(absPath, bytes);
+      nextAvatarUrl = `/uploads/users/${userId}/${fileName}`;
+
+      if (existing.avatarUrl?.startsWith(`/uploads/users/${userId}/`)) {
+        const oldRel = existing.avatarUrl.replace(/^\//, "");
+        const oldPath = path.join(process.cwd(), "public", oldRel);
+        try {
+          if (fs.existsSync(oldPath) && oldPath !== absPath) {
+            fs.unlinkSync(oldPath);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      fullName,
+      email,
+      phoneNumber,
+      ...(nextAvatarUrl !== undefined ? { avatarUrl: nextAvatarUrl } : {}),
+    },
+  });
+
+  revalidatePath("/portal");
+  revalidatePath("/portal/account");
+  revalidatePath("/portal/messages");
+  revalidatePath("/portal/briefs");
   return { ok: true };
 }
 

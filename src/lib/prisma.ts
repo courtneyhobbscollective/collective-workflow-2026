@@ -1,20 +1,8 @@
-import { createRequire } from "node:module";
-import fs from "node:fs";
-import path from "node:path";
-import type { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { loadDatabaseUrlFromEnvFiles } from "@/lib/load-database-url";
-
-/** Avoid ESM/Turbopack resolving a trimmed `@prisma/client` graph; always load the full Node client. */
-const require = createRequire(import.meta.url);
-const { PrismaClient: PrismaClientConstructor } = require("@prisma/client") as {
-  PrismaClient: new (args?: { datasources?: { db?: { url: string } } }) => PrismaClient;
-};
 
 type GlobalForPrisma = {
   prisma?: PrismaClient;
-  prismaUrl?: string;
-  /** `mtimeMs` of `node_modules/.prisma/client/index.js` when we last constructed the client. */
-  prismaGeneratedMtime?: number;
 };
 
 const globalForPrisma = globalThis as unknown as GlobalForPrisma;
@@ -28,45 +16,22 @@ if (!currentUrl) {
   );
 }
 
-const isDev = process.env.NODE_ENV !== "production";
-
-function getPrismaGeneratedBundleMtime(): number {
-  try {
-    const clientJs = path.join(process.cwd(), "node_modules/.prisma/client/index.js");
-    return fs.statSync(clientJs).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
-const generatedMtime = getPrismaGeneratedBundleMtime();
-const generatedBundleChanged =
-  isDev &&
-  generatedMtime > 0 &&
-  globalForPrisma.prismaGeneratedMtime !== generatedMtime;
-
-const shouldRecreate =
-  !globalForPrisma.prisma ||
-  globalForPrisma.prismaUrl !== currentUrl ||
-  generatedBundleChanged;
-
-let prismaInstance: PrismaClient;
-
-if (shouldRecreate) {
-  if (isDev && globalForPrisma.prisma) {
-    void globalForPrisma.prisma.$disconnect().catch(() => {});
-  }
-  prismaInstance = new PrismaClientConstructor({
+function createClient(): PrismaClient {
+  return new PrismaClient({
     datasources: { db: { url: currentUrl } },
   });
-} else {
-  prismaInstance = globalForPrisma.prisma!;
 }
 
-if (shouldRecreate) {
-  globalForPrisma.prisma = prismaInstance;
-  globalForPrisma.prismaUrl = currentUrl;
-  globalForPrisma.prismaGeneratedMtime = generatedMtime;
+/**
+ * Shared Prisma client. With `serverExternalPackages: ["@prisma/client"]` in next.config,
+ * Next/Turbopack loads the real package from node_modules (not a stale bundled copy).
+ */
+if (!globalForPrisma.prisma) {
+  globalForPrisma.prisma = createClient();
 }
+export const prisma = globalForPrisma.prisma;
 
-export { prismaInstance as prisma };
+/** Alias for clarity in server actions; same instance as `prisma`. */
+export function getPrisma(): PrismaClient {
+  return prisma;
+}

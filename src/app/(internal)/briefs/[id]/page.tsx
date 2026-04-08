@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import type { UserRole } from "@prisma/client";
 import {
-  addBriefUpdate,
   addDeliverable,
+  addMessage,
   removeDeliverable,
   updateBriefReviewLink,
 } from "@/app/actions";
@@ -17,13 +17,6 @@ import { BriefStatusForm } from "@/components/workflow/brief-status-form";
 import { PriorityPill, ScopePill, StatusPill } from "@/components/workflow/status-pill";
 import { BriefAddedToast } from "@/components/workflow/brief-added-toast";
 import { BriefClientSectionScroll } from "@/components/workflow/brief-client-section-scroll";
-
-function briefUpdateBubbleClass(authorRole: UserRole) {
-  if (authorRole === "client") {
-    return "rounded-xl border border-zinc-200/90 bg-zinc-50 px-4 py-3";
-  }
-  return "rounded-xl border border-sky-100 bg-sky-50 px-4 py-3";
-}
 
 function assigneeInitials(fullName: string) {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -52,7 +45,10 @@ export default async function BriefDetailPage({
         client: true,
         assignments: { include: { user: true } },
         deliverables: true,
-        updates: { include: { author: true }, orderBy: { createdAt: "asc" } }
+        messageThreads: {
+          where: { threadType: "client" },
+          include: { messages: { include: { sender: true }, orderBy: { createdAt: "asc" } } },
+        },
       }
     }),
     prisma.user.findMany({ where: { role: { in: ["admin", "team_member"] } } })
@@ -63,8 +59,7 @@ export default async function BriefDetailPage({
     brief.serviceProductId != null
       ? await prisma.serviceProduct.findUnique({ where: { id: brief.serviceProductId } })
       : null;
-  const visibleUpdates = brief.updates.filter((u) => u.visibleToClient);
-  const hiddenUpdates = brief.updates.filter((u) => !u.visibleToClient);
+  const clientThread = brief.messageThreads.find((t) => t.threadType === "client") ?? null;
 
   const actingUserId = currentUserId ?? users[0]?.id;
   if (!actingUserId) {
@@ -270,68 +265,41 @@ export default async function BriefDetailPage({
             </div>
           </Section>
 
-          <div id="client-facing-updates" className="scroll-mt-24">
-          <Section title="Client-facing updates" subtitle="Visible updates show in the portal">
-            <div className="space-y-3">
-              {visibleUpdates.length ? (
-                visibleUpdates.map((u) => (
-                  <div key={u.id} className={briefUpdateBubbleClass(u.author.role)}>
+          <Section title="Client thread" subtitle="Single shared thread with the client">
+            <div className="max-h-80 space-y-3 overflow-auto rounded-xl border border-zinc-200/80 bg-white p-3">
+              {(clientThread?.messages ?? []).length ? (
+                (clientThread?.messages ?? []).map((m) => (
+                  <div key={m.id} className="rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2.5">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold text-zinc-900">{u.author.fullName}</p>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                        {u.author.role === "client" ? "Client" : "Team"}
-                      </span>
+                      <p className="text-sm font-semibold text-zinc-900">{m.sender.fullName}</p>
+                      <span className="text-xs text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>
                     </div>
-                    <p className="mt-2 text-sm text-zinc-800">{u.content}</p>
-                    <p className="mt-2 text-xs text-zinc-500">{new Date(u.createdAt).toLocaleString()}</p>
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm text-zinc-800">{m.body}</p>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-zinc-500">No client-visible updates yet.</p>
+                <p className="text-sm text-zinc-500">No messages yet.</p>
               )}
-              {hiddenUpdates.length ? (
-                <div className="pt-2">
-                  <p className="text-xs font-medium text-zinc-500">Hidden (not visible to client)</p>
-                  <div className="mt-2 space-y-3">
-                    {hiddenUpdates.map((u) => (
-                      <div
-                        key={u.id}
-                        className={`${briefUpdateBubbleClass(u.author.role)} ring-1 ring-amber-200/70`}
-                      >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <p className="text-sm font-semibold text-zinc-900">{u.author.fullName}</p>
-                          <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                            {u.author.role === "client" ? "Client" : "Team"}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-zinc-800">{u.content}</p>
-                        <p className="mt-2 text-xs text-zinc-500">{new Date(u.createdAt).toLocaleString()}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
-
-            <form action={addBriefUpdate} className="mt-4 space-y-3">
-              <input type="hidden" name="briefId" value={brief.id} />
-              <input type="hidden" name="authorId" value={actingUserId} />
-              <textarea
-                name="content"
-                defaultValue={prefillContent}
-                className="w-full min-h-24 rounded-lg border border-zinc-200 bg-white p-2 text-sm"
-                placeholder="Write an update"
-              />
-              <div className="flex items-center gap-2">
-                <input type="checkbox" name="visibleToClient" defaultChecked id="visibleToClient" />
-                <label htmlFor="visibleToClient" className="text-sm text-zinc-700">Visible to client</label>
-              </div>
-              <button className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800" type="submit">
-                Post update
-              </button>
-            </form>
+            {clientThread ? (
+              <form action={addMessage} className="mt-4 space-y-3">
+                <input type="hidden" name="briefId" value={brief.id} />
+                <input type="hidden" name="threadId" value={clientThread.id} />
+                <input type="hidden" name="senderId" value={actingUserId} />
+                <textarea
+                  name="body"
+                  defaultValue={prefillContent}
+                  className="w-full min-h-24 rounded-lg border border-zinc-200 bg-white p-2 text-sm"
+                  placeholder="Write a message to the client"
+                />
+                <button className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800" type="submit">
+                  Send message
+                </button>
+              </form>
+            ) : (
+              <p className="mt-3 text-sm text-zinc-500">Client thread is unavailable for this brief.</p>
+            )}
           </Section>
-          </div>
       </div>
     </PageShell>
   );

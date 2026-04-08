@@ -42,13 +42,14 @@ export function CalendarHeaderActions({
 
   async function handleNewBooking(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
     setSaving(true);
     try {
-      const fd = new FormData(e.currentTarget);
+      const fd = new FormData(form);
       await createBooking(fd);
       router.refresh();
+      form.reset();
       setOpen("none");
-      e.currentTarget.reset();
     } finally {
       setSaving(false);
     }
@@ -89,6 +90,7 @@ export function CalendarHeaderActions({
             </h2>
             <p className="mt-1 text-sm text-zinc-500">Add a calendar entry</p>
             <form onSubmit={handleNewBooking} className="mt-5 space-y-3">
+              {viewerId ? <input type="hidden" name="viewerUserId" value={viewerId} /> : null}
               <input name="title" required placeholder="Title" className={inputCls} />
               <input type="datetime-local" name="startsAt" required className={inputCls} />
               <input type="datetime-local" name="endsAt" required className={inputCls} />

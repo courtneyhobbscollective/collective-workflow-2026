@@ -28,6 +28,24 @@ function briefCtaFromMeta(meta: unknown): string | null {
   return o.briefId;
 }
 
+function formatChatDateTime(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    hour12: false,
+    timeZone: "Europe/London",
+  }).format(date);
+}
+
+function formatChatTime(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Europe/London",
+  }).format(date);
+}
+
 export function TeamChatMessageList({ messages }: { messages: Row[] }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -45,7 +63,7 @@ export function TeamChatMessageList({ messages }: { messages: Row[] }) {
             >
               <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600/90">Activity</p>
               <pre className="mt-1 whitespace-pre-wrap font-sans text-sm leading-relaxed text-indigo-950">{m.body}</pre>
-              <p className="mt-2 text-[11px] text-indigo-600/80">{new Date(m.createdAt).toLocaleString()}</p>
+              <p className="mt-2 text-[11px] text-indigo-600/80">{formatChatDateTime(new Date(m.createdAt))}</p>
             </div>
           );
         }
@@ -60,7 +78,7 @@ export function TeamChatMessageList({ messages }: { messages: Row[] }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
                 <span className="text-sm font-semibold text-zinc-900">{senderName}</span>
-                <span className="text-[11px] text-zinc-400">{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="text-[11px] text-zinc-400">{formatChatTime(new Date(m.createdAt))}</span>
               </div>
               {hasBubble ? (
                 <div className="mt-1.5 w-fit max-w-[min(100%,28rem)] rounded-2xl rounded-tl-md border border-zinc-200/90 bg-white px-3 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">

@@ -18,3 +18,10 @@ export async function requireRole(allowed: UserRole[]) {
   }
   return role;
 }
+
+/** For admin-only pages: signed-in team members are sent to the dashboard instead of login. */
+export async function requireAdmin() {
+  const role = await getSessionRole();
+  if (!role) redirect("/login");
+  if (role !== "admin") redirect("/dashboard");
+}

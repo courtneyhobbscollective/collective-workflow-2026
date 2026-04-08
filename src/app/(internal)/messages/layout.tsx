@@ -2,9 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/auth";
 import { ensureTeamChannelsForAllClients, sortTeamChannelsForNav } from "@/lib/team-chat";
 import { TeamChatSidebar } from "./team-chat-sidebar";
+import { ensureLeadFollowUpReminders } from "@/lib/crm/lead-follow-up-reminders";
 
 export default async function MessagesLayout({ children }: { children: React.ReactNode }) {
   await ensureTeamChannelsForAllClients();
+  await ensureLeadFollowUpReminders();
   const userId = await getSessionUserId();
 
   const [channels, teammates, dmRaw] = await Promise.all([

@@ -16,7 +16,7 @@ export function TeamChatSidebar(props: {
     <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 bg-white">
       <div className="border-b border-zinc-100 px-3 py-2.5">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Channels</p>
-        <p className="mt-0.5 text-xs text-zinc-400">General chat + one channel per client</p>
+        <p className="mt-0.5 text-xs text-zinc-400">General chat + Leads + one channel per client</p>
       </div>
       <nav className="max-h-52 overflow-y-auto p-2">
         {props.channels.length === 0 ? (
