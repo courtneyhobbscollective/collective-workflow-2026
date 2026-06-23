@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import { PageShell } from "@/components/workflow/page-shell";
 import { getSessionRole, getSessionUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -61,7 +62,12 @@ export default async function LiveWorkPage() {
   return (
     <PageShell
       title="Live work"
-      subtitle="Track active briefs by workflow stage — change status on each brief to move it between sections"
+      subtitle={
+        <HelpSubtitle
+          text="Track active briefs by workflow stage — change status on each brief to move it between sections"
+          articleId="live-work"
+        />
+      }
     >
       <LiveWorkBoard
         initialRows={initialRows}

@@ -24,9 +24,10 @@ export default function Error({
         start <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs">npm run dev</code> again. Hot reload does
         not reload the Prisma client, so a full restart is required.
       </p>
-      {process.env.NODE_ENV === "development" ? (
-        <pre className="mt-4 max-h-48 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">{error.message}</pre>
-      ) : null}
+      <pre className="mt-4 max-h-48 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">
+        {error.message}
+        {error.digest ? `\n\nDigest: ${error.digest}` : ""}
+      </pre>
       <button
         type="button"
         onClick={() => reset()}

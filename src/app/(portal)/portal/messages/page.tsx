@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import { StatusPill } from "@/components/workflow/status-pill";
 import { PageShell } from "@/components/workflow/page-shell";
 import { Section } from "@/components/workflow/section";
@@ -9,8 +10,17 @@ export default async function PortalMessagesPage() {
   const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
   const threads = await prisma.messageThread.findMany({ where: { threadType: "client", brief: { clientId: user?.clientId ?? "" } }, include: { messages: true, brief: true } });
   return (
-    <PageShell title="Messages" subtitle="Brief-specific communication threads">
-      <Section title="Threads">
+    <PageShell
+      title="Messages"
+      subtitle={
+        <HelpSubtitle
+          text="Brief-specific communication threads"
+          articleId="portal-messages"
+          helpBasePath="/portal/help"
+        />
+      }
+    >
+      <Section title="Threads" helpArticleId="portal-messages" helpBasePath="/portal/help">
         {threads.length ? (
           <div className="space-y-2">
             {threads.map((t) => (

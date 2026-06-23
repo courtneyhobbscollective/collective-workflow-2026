@@ -4,11 +4,12 @@ import { usePathname } from "next/navigation";
 import { type PropsWithChildren } from "react";
 import { cn } from "@/lib/utils";
 
-/** Re-animates main content on route change. */
+/** Re-animates main content on route change. Keep /messages mounted so channel switches stay instant. */
 export function PageTransition({ children }: PropsWithChildren) {
   const pathname = usePathname();
+  const transitionKey = pathname.startsWith("/messages") ? "/messages" : pathname;
   return (
-    <div key={pathname} className="animate-page-enter">
+    <div key={transitionKey} className="animate-page-enter">
       {children}
     </div>
   );

@@ -33,7 +33,7 @@ const internalSectionsBase: readonly NavSection[] = [
   {
     title: "Sales",
     icon: Briefcase,
-    links: [["/crm", "CRM"], ["/crm/leads", "Leads"], ["/clients", "Clients"]],
+    links: [["/crm", "CRM"], ["/crm/deals", "Deal boards"], ["/crm/leads", "Leads"], ["/clients", "Clients"]],
   },
   {
     title: "Delivery",
@@ -42,7 +42,14 @@ const internalSectionsBase: readonly NavSection[] = [
   },
   { title: "Comms", icon: MessageSquare, links: [["/messages", "Team chat"]] },
   { title: "Business", icon: ChartLine, links: [["/services", "Services"], ["/reports", "Reports"]] },
-  { title: "Settings", icon: Settings2, links: [["/settings/profile", "Profile"]] },
+  {
+    title: "Settings",
+    icon: Settings2,
+    links: [
+      ["/settings/profile", "Profile"],
+      ["/help", "Help & guides"],
+    ],
+  },
 ];
 
 const portalLinks: readonly NavLink[] = [
@@ -50,10 +57,12 @@ const portalLinks: readonly NavLink[] = [
   ["/portal/briefs", "Briefs"],
   ["/portal/messages", "Messages"],
   ["/portal/completed", "Completed"],
+  ["/portal/help", "Help"],
   ["/portal/account", "Profile"],
 ];
 
-const teamMemberHiddenSectionTitles = new Set(["Sales", "Business"]);
+/** Staff users (`team_member`) — hidden in sidebar; also blocked in middleware. */
+const staffHiddenSectionTitles = new Set(["Sales", "Business"]);
 
 function isNavLinkActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -370,7 +379,7 @@ export function AppShell({
               : section
           )
         : isTeamMember
-          ? internalSectionsBase.filter((section) => !teamMemberHiddenSectionTitles.has(section.title))
+          ? internalSectionsBase.filter((section) => !staffHiddenSectionTitles.has(section.title))
           : internalSectionsBase,
     [isAdmin, isTeamMember]
   );

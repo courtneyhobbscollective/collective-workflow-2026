@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
@@ -11,13 +12,18 @@ export default async function BriefsPage() {
   return (
     <PageShell
       title="Briefs"
-      subtitle="Manage production briefs, assignments, deliverables, and delivery milestones"
+      subtitle={
+        <HelpSubtitle
+          text="Manage production briefs, assignments, deliverables, and delivery milestones"
+          articleId="brief-lifecycle"
+        />
+      }
       action={<Link href="/briefs/new" className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">New brief</Link>}
     >
       {briefs.length === 0 ? (
         <EmptyState title="No briefs yet" body="Create a brief to start assigning your team and tracking delivery." ctaHref="/briefs/new" ctaLabel="Create brief" />
       ) : (
-        <Section title="Active and upcoming" subtitle="Sorted by deadline">
+        <Section title="Active and upcoming" subtitle="Sorted by deadline" helpArticleId="brief-statuses">
           <Table>
             <TableHeader>
               <div className="flex gap-3 py-3">

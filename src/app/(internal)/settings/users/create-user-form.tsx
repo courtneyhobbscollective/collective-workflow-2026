@@ -3,6 +3,7 @@
 import { UserRole } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { ROLE_LABELS } from "@/lib/roles";
 import { createUser } from "./actions";
 
 type ClientOption = { id: string; name: string };
@@ -75,10 +76,13 @@ export function CreateUserForm(props: { clients: ClientOption[] }) {
           onChange={(e) => setRole(e.target.value as UserRole)}
           className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
         >
-          <option value={UserRole.admin}>Admin</option>
-          <option value={UserRole.team_member}>Team member</option>
-          <option value={UserRole.client}>Client</option>
+          <option value={UserRole.admin}>{ROLE_LABELS.admin}</option>
+          <option value={UserRole.team_member}>{ROLE_LABELS.team_member}</option>
+          <option value={UserRole.client}>{ROLE_LABELS.client}</option>
         </select>
+        <p className="mt-1 text-xs text-zinc-500">
+          Super Admin — full access. Staff — delivery &amp; comms only. Client — portal only.
+        </p>
       </div>
       {role === UserRole.client ? (
         <div>

@@ -1,5 +1,7 @@
 import { revalidatePath } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { userIdsMentionedInText } from "@/lib/team-mentions";
 
 /** Workspace-wide channel; not tied to a client (`clientId` is null). */
@@ -15,7 +17,7 @@ export function sortTeamChannelsForNav<T extends { clientId: string | null; name
     const rank = (c: T) => {
       if (c.clientId === null && c.name === GENERAL_TEAM_CHANNEL_NAME) return 0;
       if (c.clientId === null && c.name === LEADS_TEAM_CHANNEL_NAME) return 1;
-      if (c.clientId === null) return 2; // fallback for legacy/orphan null channels
+      if (c.clientId === null) return 2;
       return 3;
     };
     const r = rank(a) - rank(b);
@@ -24,19 +26,26 @@ export function sortTeamChannelsForNav<T extends { clientId: string | null; name
   });
 }
 
-async function syncInternalUsersToChannel(channelId: string) {
-  const internalUsers = await prisma.user.findMany({
-    where: { role: { in: ["admin", "team_member"] } },
-    select: { id: true },
-  });
-
-  for (const { id: userId } of internalUsers) {
-    await prisma.teamChannelMember.upsert({
-      where: { channelId_userId: { channelId, userId } },
-      create: { channelId, userId },
-      update: {},
+const getInternalUserIds = unstable_cache(
+  async () => {
+    const users = await prisma.user.findMany({
+      where: { role: { in: ["admin", "team_member"] } },
+      select: { id: true },
     });
-  }
+    return users.map((u) => u.id);
+  },
+  ["internal-user-ids-v1"],
+  { revalidate: 300, tags: [CACHE_TAGS.internalUserIds] }
+);
+
+async function syncInternalUsersToChannel(channelId: string) {
+  const userIds = await getInternalUserIds();
+  if (!userIds.length) return;
+
+  await prisma.teamChannelMember.createMany({
+    data: userIds.map((userId) => ({ channelId, userId })),
+    skipDuplicates: true,
+  });
 }
 
 /** Merge extra General Chat channels (legacy dupes), then delete duplicates. */
@@ -63,11 +72,10 @@ async function mergeDuplicateGeneralTeamChannels() {
         where: { channelId: rid },
         select: { userId: true },
       });
-      for (const { userId } of orphanedMembers) {
-        await tx.teamChannelMember.upsert({
-          where: { channelId_userId: { channelId: keepId, userId } },
-          create: { channelId: keepId, userId },
-          update: {},
+      if (orphanedMembers.length) {
+        await tx.teamChannelMember.createMany({
+          data: orphanedMembers.map(({ userId }) => ({ channelId: keepId, userId })),
+          skipDuplicates: true,
         });
       }
       await tx.teamChannelMember.deleteMany({ where: { channelId: rid } });
@@ -120,6 +128,27 @@ export async function ensureTeamChannelsForAllClients() {
   for (const c of clients) {
     await ensureClientChannelWithMembers(c.id);
   }
+}
+
+/**
+ * Fast path for /messages — workspace channels only; client channels join on first open.
+ * Full client-channel backfill belongs in imports / client create, not every navigation.
+ */
+export async function ensureMessagesTeamChatReady(userId: string | null) {
+  const [general, leads] = await Promise.all([ensureGeneralTeamChannel(), ensureLeadsTeamChannel()]);
+
+  if (!userId) return;
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  if (!user || (user.role !== "admin" && user.role !== "team_member")) return;
+
+  await prisma.teamChannelMember.createMany({
+    data: [
+      { channelId: general.id, userId },
+      { channelId: leads.id, userId },
+    ],
+    skipDuplicates: true,
+  });
 }
 
 /** Create channel named like the client (if missing) and add all internal users as members. */
@@ -257,23 +286,21 @@ export async function ensureUserInAllTeamChannels(userId: string) {
   if (!user || (user.role !== "admin" && user.role !== "team_member")) return;
 
   const channels = await prisma.teamChannel.findMany({ select: { id: true } });
-  for (const ch of channels) {
-    await prisma.teamChannelMember.upsert({
-      where: { channelId_userId: { channelId: ch.id, userId } },
-      create: { channelId: ch.id, userId },
-      update: {},
-    });
-  }
+  if (!channels.length) return;
+
+  await prisma.teamChannelMember.createMany({
+    data: channels.map((ch) => ({ channelId: ch.id, userId })),
+    skipDuplicates: true,
+  });
 }
 
 export async function ensureViewerInChannel(channelId: string, userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
   if (!user || (user.role !== "admin" && user.role !== "team_member")) return false;
 
-  await prisma.teamChannelMember.upsert({
-    where: { channelId_userId: { channelId, userId } },
-    create: { channelId, userId },
-    update: {},
+  await prisma.teamChannelMember.createMany({
+    data: [{ channelId, userId }],
+    skipDuplicates: true,
   });
   return true;
 }

@@ -150,7 +150,7 @@ export async function getDashboardFeedForViewer(userId: string | null, take = 20
       : Promise.resolve([]),
     prisma.activityLog.findMany({
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: 28,
       include: {
         user: { select: { fullName: true } },
         brief: { select: { id: true, title: true } },

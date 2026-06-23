@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PageShell } from "@/components/workflow/page-shell";
@@ -26,7 +27,7 @@ export default async function CrmClientsCheckInsPage() {
   return (
     <PageShell
       title="CRM check-ins"
-      subtitle="Clients with a relationship cadence"
+      subtitle={<HelpSubtitle text="Clients with a relationship cadence" articleId="crm-check-ins" />}
       action={
         <Link href="/crm" className="text-sm font-medium text-sky-700 hover:text-sky-900">
           CRM home

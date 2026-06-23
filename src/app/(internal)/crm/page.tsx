@@ -1,12 +1,24 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
-import { Building2, CalendarClock, UserPlus } from "lucide-react";
+import { Building2, CalendarClock, LayoutGrid, UserPlus } from "lucide-react";
 import { PageShell } from "@/components/workflow/page-shell";
 import { Card } from "@/components/ui";
 
 export default function CrmHomePage() {
   return (
-    <PageShell title="CRM" subtitle="Leads, clients, and relationship check-ins">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <PageShell
+      title="CRM"
+      subtitle={<HelpSubtitle text="Leads, clients, and relationship check-ins" articleId="crm-leads" />}
+    >
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href="/crm/deals" className="group block rounded-xl border border-zinc-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-zinc-300 hover:bg-zinc-50/80">
+          <div className="flex items-center gap-2 text-zinc-900">
+            <LayoutGrid className="h-5 w-5 text-sky-600" aria-hidden />
+            <h2 className="text-base font-semibold">Deal boards</h2>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-600">Monthly project boards with stage, billing status, and team updates.</p>
+          <span className="mt-3 inline-block text-sm font-medium text-sky-700 group-hover:underline">Open boards →</span>
+        </Link>
         <Link href="/crm/leads" className="group block rounded-xl border border-zinc-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-zinc-300 hover:bg-zinc-50/80">
           <div className="flex items-center gap-2 text-zinc-900">
             <UserPlus className="h-5 w-5 text-violet-600" aria-hidden />

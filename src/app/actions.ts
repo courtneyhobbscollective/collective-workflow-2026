@@ -16,7 +16,12 @@ import {
 import { addDays } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, requireRole } from "@/lib/auth";
+import {
+  revalidateClientsListCache,
+  revalidateDashboardCaches,
+  revalidateMessagesCaches,
+} from "@/lib/revalidate-caches";
+import { getSessionUserId, getVerifiedSessionUserId, requireRole } from "@/lib/auth";
 import { requiresAdminContractConfirmationForInProgress } from "@/lib/workflow/contract-gate";
 import {
   ensureClientChannelWithMembers,
@@ -65,6 +70,17 @@ async function actorDisplayName() {
   return u?.fullName ?? "Someone";
 }
 
+function splitPersonName(full: string) {
+  const cleaned = full.trim().replace(/\s+/g, " ");
+  if (!cleaned) return { firstName: "", lastName: "", fullName: "" };
+  const parts = cleaned.split(" ");
+  return {
+    firstName: parts[0] ?? cleaned,
+    lastName: parts.slice(1).join(" "),
+    fullName: cleaned,
+  };
+}
+
 export async function createClient(formData: FormData) {
   const role = await requireRole(["admin"]);
   if (role !== "admin") return;
@@ -80,23 +96,32 @@ export async function createClient(formData: FormData) {
   const pocName = String(formData.get("pocName") || "");
   const pocEmail = String(formData.get("pocEmail") || "");
   const pocTitle = String(formData.get("pocTitle") || "");
+  const pocPhone = String(formData.get("pocPhone") || "");
 
   const accountsName = String(formData.get("accountsName") || "");
   const accountsEmail = String(formData.get("accountsEmail") || "");
   const accountsTitle = String(formData.get("accountsTitle") || "");
+  const accountsPhone = String(formData.get("accountsPhone") || "");
 
   const contactsToCreate: Array<{
+    firstName: string;
+    lastName: string;
     name: string;
     email: string;
+    phoneNumber?: string | null;
     title?: string | null;
     isPrimary: boolean;
     role: ClientContactRole;
   }> = [];
 
   if (pocName && pocEmail) {
+    const poc = splitPersonName(pocName);
     contactsToCreate.push({
-      name: pocName,
+      firstName: poc.firstName,
+      lastName: poc.lastName,
+      name: poc.fullName,
       email: pocEmail,
+      phoneNumber: pocPhone || null,
       title: pocTitle || null,
       isPrimary: true,
       role: "point_of_contact",
@@ -104,9 +129,13 @@ export async function createClient(formData: FormData) {
   }
 
   if (accountsName && accountsEmail) {
+    const acct = splitPersonName(accountsName);
     contactsToCreate.push({
-      name: accountsName,
+      firstName: acct.firstName,
+      lastName: acct.lastName,
+      name: acct.fullName,
       email: accountsEmail,
+      phoneNumber: accountsPhone || null,
       title: accountsTitle || null,
       isPrimary: false,
       role: "accounts_contact",
@@ -170,6 +199,9 @@ export async function createClient(formData: FormData) {
     clientId: created.id,
   });
   revalidatePath("/clients");
+  revalidateClientsListCache();
+  revalidateDashboardCaches();
+  revalidateMessagesCaches();
 
   const fromWonLeadId = String(formData.get("fromWonLeadId") ?? "").trim();
   if (fromWonLeadId) {
@@ -211,10 +243,12 @@ export async function updateClient(formData: FormData) {
   const pocName = String(formData.get("pocName") || "");
   const pocEmail = String(formData.get("pocEmail") || "");
   const pocTitle = String(formData.get("pocTitle") || "");
+  const pocPhone = String(formData.get("pocPhone") || "");
 
   const accountsName = String(formData.get("accountsName") || "");
   const accountsEmail = String(formData.get("accountsEmail") || "");
   const accountsTitle = String(formData.get("accountsTitle") || "");
+  const accountsPhone = String(formData.get("accountsPhone") || "");
 
   await prisma.client.update({
     where: { id: clientId },
@@ -230,15 +264,28 @@ export async function updateClient(formData: FormData) {
   });
   await syncTeamChannelName(clientId, name);
 
-  async function upsertContact(role: ClientContactRole, payload: { name: string; email: string; title: string | null; isPrimary: boolean }) {
+  async function upsertContact(
+    role: ClientContactRole,
+    payload: {
+      name: string;
+      email: string;
+      phone: string;
+      title: string | null;
+      isPrimary: boolean;
+    }
+  ) {
     const existing = await prisma.clientContact.findFirst({ where: { clientId, role } });
+    const parsed = splitPersonName(payload.name);
     if (payload.name && payload.email) {
       if (existing) {
         await prisma.clientContact.update({
           where: { id: existing.id },
           data: {
-            name: payload.name,
+            firstName: parsed.firstName,
+            lastName: parsed.lastName || null,
+            name: parsed.fullName,
             email: payload.email,
+            phoneNumber: payload.phone || null,
             title: payload.title,
             isPrimary: payload.isPrimary,
           },
@@ -247,8 +294,11 @@ export async function updateClient(formData: FormData) {
         await prisma.clientContact.create({
           data: {
             clientId,
-            name: payload.name,
+            firstName: parsed.firstName,
+            lastName: parsed.lastName || null,
+            name: parsed.fullName,
             email: payload.email,
+            phoneNumber: payload.phone || null,
             title: payload.title,
             isPrimary: payload.isPrimary,
             role,
@@ -264,6 +314,7 @@ export async function updateClient(formData: FormData) {
   await upsertContact("point_of_contact", {
     name: pocName,
     email: pocEmail,
+    phone: pocPhone,
     title: pocTitle || null,
     isPrimary: true,
   });
@@ -271,6 +322,7 @@ export async function updateClient(formData: FormData) {
   await upsertContact("accounts_contact", {
     name: accountsName,
     email: accountsEmail,
+    phone: accountsPhone,
     title: accountsTitle || null,
     isPrimary: false,
   });
@@ -305,6 +357,8 @@ export async function updateClient(formData: FormData) {
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/clients");
+  revalidateClientsListCache();
+  revalidateDashboardCaches();
 }
 
 export async function updateClientRelationshipCadence(formData: FormData) {
@@ -345,6 +399,8 @@ export async function updateClientRelationshipCadence(formData: FormData) {
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/clients");
   revalidatePath("/dashboard");
+  revalidateClientsListCache();
+  revalidateDashboardCaches();
 }
 
 export async function recordClientRelationshipContact(formData: FormData) {
@@ -374,6 +430,8 @@ export async function recordClientRelationshipContact(formData: FormData) {
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/clients");
   revalidatePath("/dashboard");
+  revalidateClientsListCache();
+  revalidateDashboardCaches();
 }
 
 export async function createServiceProduct(formData: FormData) {
@@ -1202,26 +1260,52 @@ export async function addBriefUpdate(formData: FormData) {
 }
 
 export async function addInternalNote(formData: FormData) {
+  await requireRole(["admin", "team_member"]);
+  const userId = await getSessionUserId();
+  if (!userId) return;
+
+  const briefId = String(formData.get("briefId") ?? "").trim();
+  const content = String(formData.get("content") ?? "").trim();
+  if (!briefId || !content) return;
+
+  const brief = await prisma.brief.findUnique({ where: { id: briefId }, select: { id: true } });
+  if (!brief) return;
+
   await prisma.internalNote.create({
     data: {
-      briefId: String(formData.get("briefId")),
-      authorId: String(formData.get("authorId")),
+      briefId,
+      authorId: userId,
       noteType: (String(formData.get("noteType")) || "general") as InternalNoteType,
-      content: String(formData.get("content"))
-    }
+      content,
+    },
   });
-  revalidatePath(`/briefs/${String(formData.get("briefId"))}`);
+  revalidatePath(`/briefs/${briefId}`);
 }
 
 export async function addMessage(formData: FormData) {
-  await prisma.message.create({
-    data: {
-      threadId: String(formData.get("threadId")),
-      senderId: String(formData.get("senderId")),
-      body: String(formData.get("body"))
-    }
+  const role = await requireRole(["admin", "team_member", "client"]);
+  const userId = await getSessionUserId();
+  if (!userId) return;
+
+  const threadId = String(formData.get("threadId") ?? "").trim();
+  const briefId = String(formData.get("briefId") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  if (!threadId || !briefId || !body) return;
+
+  const thread = await prisma.messageThread.findUnique({
+    where: { id: threadId },
+    include: { brief: { select: { id: true, clientId: true } } },
   });
-  const briefId = String(formData.get("briefId"));
+  if (!thread || thread.briefId !== briefId || thread.threadType !== "client") return;
+
+  if (role === "client") {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { clientId: true } });
+    if (!user?.clientId || user.clientId !== thread.brief.clientId) return;
+  }
+
+  await prisma.message.create({
+    data: { threadId, senderId: userId, body },
+  });
   revalidatePath(`/briefs/${briefId}`);
   revalidatePath(`/portal/briefs/${briefId}`);
 }
@@ -1319,12 +1403,17 @@ export async function sendTeamChannelMessage(formData: FormData) {
   if (!channelId || (!body && !gifUrl)) return;
   const userId = await getSessionUserId();
   if (!userId) return;
+
+  let senderId: string | null = userId;
+  const sender = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!sender) senderId = null;
+
   const ok = await ensureViewerInChannel(channelId, userId);
   if (!ok) return;
   await prisma.teamChannelMessage.create({
     data: {
       channelId,
-      senderId: userId,
+      senderId,
       kind: "user",
       body: body || (gifUrl ? " " : ""),
       metadata: metadata && Object.keys(metadata).length ? (metadata as object) : undefined,
@@ -1358,8 +1447,16 @@ export async function sendDmMessage(formData: FormData) {
   }
   const gifUrl = typeof metadata?.gifUrl === "string" ? metadata.gifUrl : null;
   if (!threadId || (!body && !gifUrl)) return;
-  const userId = await getSessionUserId();
-  if (!userId) return;
+  const userId = await getVerifiedSessionUserId();
+  if (!userId) {
+    throw new Error("Your account could not be verified. Sign out and sign in again.");
+  }
+
+  const sender = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, fullName: true } });
+  if (!sender) {
+    throw new Error("Your account could not be verified. Sign out and sign in again.");
+  }
+
   const thread = await prisma.dmThread.findFirst({
     where: { id: threadId, OR: [{ lowUserId: userId }, { highUserId: userId }] },
   });
@@ -1375,13 +1472,12 @@ export async function sendDmMessage(formData: FormData) {
   await prisma.dmThread.update({ where: { id: threadId }, data: { updatedAt: new Date() } });
 
   const otherUserId = thread.lowUserId === userId ? thread.highUserId : thread.lowUserId;
-  const sender = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
   const preview =
     (body || (gifUrl ? "Sent a GIF" : "")).replace(/\s+/g, " ").trim().slice(0, 160) || "New message";
   await prisma.notification.create({
     data: {
       userId: otherUserId,
-      title: `Message from ${sender?.fullName ?? "Teammate"}`,
+      title: `Message from ${sender.fullName}`,
       body: preview,
       href: `/messages/dm/${threadId}`,
     },
@@ -1395,7 +1491,7 @@ export async function sendDmMessage(formData: FormData) {
 export async function startDmWithUser(formData: FormData) {
   await requireRole(["admin", "team_member"]);
   const partnerId = String(formData.get("partnerId") || "");
-  const selfId = await getSessionUserId();
+  const selfId = await getVerifiedSessionUserId();
   if (!selfId || !partnerId || partnerId === selfId) return;
   const partner = await prisma.user.findFirst({
     where: { id: partnerId, role: { in: ["admin", "team_member"] } },

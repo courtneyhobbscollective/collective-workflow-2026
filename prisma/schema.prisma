@@ -197,6 +197,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   aiConversations AiConversation[]
   aiMessages      AiMessage[]
+  ownedDeals      Deal[]            @relation("DealOwner")
+  dealUpdates     DealUpdate[]      @relation("DealUpdateAuthor")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 }
@@ -302,6 +304,7 @@ model Client {
   assets          ClientAsset[]
   teamChannel     TeamChannel?
   sourceLead      Lead?
+  deals           Deal[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 }
@@ -337,6 +340,75 @@ model Lead {
   @@index([status])
   @@index([email])
   @@index([nextFollowUpDueAt])
+}
+
+/** Monday.com-style sales stage on a monthly deal board. */
+enum DealStage {
+  lead
+  proposal
+  negotiation
+  contract_sent
+  won
+  quote_sent
+  completed
+  in_production
+  in_edits
+  lost
+  ideation
+}
+
+model DealBoard {
+  id        String   @id @default(cuid())
+  label     String
+  year      Int
+  month     Int
+  deals     Deal[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month])
+  @@index([year, month])
+}
+
+model Deal {
+  id            String    @id @default(cuid())
+  boardId       String
+  board         DealBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name          String
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  contactName   String?
+  ownerUserId   String?
+  owner         User?     @relation("DealOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  stage         DealStage @default(lead)
+  /// Billing / invoicing label (Invoiced, PO Requested, etc.)
+  billingStatus String?
+  dealValue     Float?
+  timelineStart DateTime?
+  timelineEnd   DateTime?
+  notes         String?
+  mondayItemId  String?   @unique
+  sortOrder     Int       @default(0)
+  updates       DealUpdate[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([boardId, sortOrder])
+  @@index([stage])
+}
+
+model DealUpdate {
+  id           String   @id @default(cuid())
+  dealId       String
+  deal         Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  authorUserId String?
+  author       User?    @relation("DealUpdateAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorName   String
+  body         String
+  mondayPostId String?
+  createdAt    DateTime @default(now())
+
+  @@index([dealId, createdAt])
 }
 
 model TeamChannel {
@@ -408,8 +480,11 @@ model ClientContact {
   id          String   @id @default(cuid())
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id])
+  firstName   String?
+  lastName    String?
   name        String
   email       String
+  phoneNumber String?
   title       String?
   isPrimary   Boolean  @default(false)
   role        ClientContactRole @default(other)

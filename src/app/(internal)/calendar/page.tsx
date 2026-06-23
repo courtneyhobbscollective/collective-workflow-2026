@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import { CalendarHeaderActions, type CalendarScheduleItem } from "@/components/workflow/calendar-header-actions";
 import { CalendarMonthGrid, type CalendarBookingLite } from "@/components/workflow/calendar-month-grid";
 import { PageShell } from "@/components/workflow/page-shell";
@@ -73,7 +74,12 @@ export default async function CalendarPage() {
   return (
     <PageShell
       title="Calendar"
-      subtitle="Month view with team bookings — use the buttons to add entries or open your schedule"
+      subtitle={
+        <HelpSubtitle
+          text="Month view with team bookings — use the buttons to add entries or open your schedule"
+          articleId="calendar"
+        />
+      }
       action={<CalendarHeaderActions viewerId={viewerId} schedule={schedule} />}
     >
       <Card className="p-5 sm:p-6">

@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import { PageShell } from "@/components/workflow/page-shell";
 import { Section } from "@/components/workflow/section";
 import { requireAdmin } from "@/lib/auth";
@@ -38,7 +39,12 @@ export default async function SignupRequestsPage() {
   return (
     <PageShell
       title="Client signup requests"
-      subtitle="Approve new client companies after they submit the public form. Approved users can sign in with email and password."
+      subtitle={
+        <HelpSubtitle
+          text="Approve new client companies after they submit the public form. Approved users can sign in with email and password."
+          articleId="client-onboarding"
+        />
+      }
     >
       <Section title="Pending">
         {pending.length === 0 ? (

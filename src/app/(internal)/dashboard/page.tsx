@@ -1,3 +1,5 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
+import { HelpHint } from "@/components/help/help-hint";
 import { Badge, Card } from "@/components/ui";
 import { PageShell } from "@/components/workflow/page-shell";
 import { HeaderMessagesIndicator } from "@/components/workflow/header-messages-indicator";
@@ -6,26 +8,21 @@ import {
   countUnreadNotifications,
   getDashboardFeedForViewer,
 } from "@/lib/dashboard-feed";
+import { getCrmCheckInsDueCount, getDashboardOrgStats, loadAdminDashboardBundle } from "@/lib/dashboard-stats";
 import { DashboardFeedCollapsed } from "@/components/workflow/dashboard-feed-collapsed";
 import { DashboardAssignedWorkCollapsed } from "@/components/workflow/dashboard-assigned-work-collapsed";
 import { DashboardCalendarSnapshotCollapsed } from "@/components/workflow/dashboard-calendar-snapshot-collapsed";
 import { ClearNotificationsButton } from "@/components/workflow/dashboard-notification-actions";
+import { DashboardQuickActions } from "@/components/workflow/dashboard-quick-actions";
 import { getSessionRole, getSessionUserId } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { LIVE_WORK_PAGE_STATUSES } from "@/lib/workflow/live-work-page-statuses";
 import { ensureLeadFollowUpReminders } from "@/lib/crm/lead-follow-up-reminders";
 import { ensureRelationshipContactReminders } from "@/lib/crm/relationship-reminders";
+import { prisma } from "@/lib/prisma";
+import { LIVE_WORK_PAGE_STATUSES } from "@/lib/workflow/live-work-page-statuses";
 import { cn } from "@/lib/utils";
 import { Building2, CalendarClock, ClipboardList, Layers, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
-
-type AdminCrmStanding = {
-  openLeadsCount: number;
-  activeClientsCount: number;
-  leadsPreview: { id: string; name: string; companyName: string | null }[];
-  clientsPreview: { id: string; name: string }[];
-  checkInsPreview: { id: string; name: string; nextRelationshipContactDueAt: Date | null }[];
-};
+import { after } from "next/server";
 
 type AdminPendingOnboarding = {
   count: number;
@@ -34,34 +31,36 @@ type AdminPendingOnboarding = {
 
 const ACTIVE_LIVE_WORK_STATUSES = LIVE_WORK_PAGE_STATUSES.filter((s) => s !== "completed");
 
+function runDashboardReminderSync() {
+  after(async () => {
+    try {
+      await Promise.all([ensureRelationshipContactReminders(), ensureLeadFollowUpReminders()]);
+    } catch (err) {
+      console.error("[dashboard] reminder sync failed:", err);
+    }
+  });
+}
+
 export default async function DashboardPage() {
   const [userId, role] = await Promise.all([getSessionUserId(), getSessionRole()]);
-  await ensureRelationshipContactReminders();
-  await ensureLeadFollowUpReminders();
+  runDashboardReminderSync();
 
   const now = new Date();
+  const isAdmin = role === "admin";
+
   const [
-    briefCount,
-    clientCount,
-    catalogBriefCount,
-    crmCheckInsDue,
+    orgStats,
+    crmCheckInsDueForTeam,
     feed,
     sessionUser,
     unreadNotificationCount,
     unreadChatCount,
     assignedLiveWorkBriefs,
     myUpcomingBookings,
+    adminBundle,
   ] = await Promise.all([
-    prisma.brief.count({ where: { status: { not: "completed" } } }),
-    prisma.client.count(),
-    prisma.brief.count({ where: { serviceProductId: { not: null } } }),
-    prisma.client.count({
-      where: {
-        status: "active",
-        relationshipContactFrequencyDays: { not: null, gt: 0 },
-        nextRelationshipContactDueAt: { lte: now },
-      },
-    }),
+    getDashboardOrgStats(),
+    isAdmin ? Promise.resolve(0) : getCrmCheckInsDueCount(),
     getDashboardFeedForViewer(userId, 20),
     userId ? prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, avatarUrl: true } }) : null,
     userId ? countUnreadNotifications(userId) : Promise.resolve(0),
@@ -111,56 +110,15 @@ export default async function DashboardPage() {
           },
         })
       : Promise.resolve([]),
+    isAdmin ? loadAdminDashboardBundle(now) : Promise.resolve(null),
   ]);
 
-  let adminCrmStanding: AdminCrmStanding | null = null;
-  let adminPendingOnboarding: AdminPendingOnboarding = null;
-  if (role === "admin") {
-    const [openLeadsCount, activeClientsCount, leadsPreview, clientsPreview, checkInsPreview, onboardingCount, onboardingPreview] =
-      await Promise.all([
-        prisma.lead.count({
-          where: { convertedClientId: null, status: { notIn: ["won", "lost"] } },
-        }),
-        prisma.client.count({ where: { status: "active" } }),
-        prisma.lead.findMany({
-          where: { convertedClientId: null, status: { notIn: ["won", "lost"] } },
-          orderBy: { updatedAt: "desc" },
-          take: 5,
-          select: { id: true, name: true, companyName: true },
-        }),
-        prisma.client.findMany({
-          where: { status: "active" },
-          orderBy: { name: "asc" },
-          take: 5,
-          select: { id: true, name: true },
-        }),
-        prisma.client.findMany({
-          where: {
-            status: "active",
-            relationshipContactFrequencyDays: { not: null, gt: 0 },
-            nextRelationshipContactDueAt: { lte: now },
-          },
-          orderBy: { nextRelationshipContactDueAt: "asc" },
-          take: 5,
-          select: { id: true, name: true, nextRelationshipContactDueAt: true },
-        }),
-        prisma.pendingClientSignup.count({ where: { status: "pending" } }),
-        prisma.pendingClientSignup.findMany({
-          where: { status: "pending" },
-          orderBy: { createdAt: "asc" },
-          take: 3,
-          select: { id: true, companyName: true, fullName: true, createdAt: true },
-        }),
-      ]);
-    adminCrmStanding = {
-      openLeadsCount,
-      activeClientsCount,
-      leadsPreview,
-      clientsPreview,
-      checkInsPreview,
-    };
-    adminPendingOnboarding = { count: onboardingCount, preview: onboardingPreview };
-  }
+  const { briefCount, catalogBriefCount, clientCount } = orgStats;
+  const adminCrmStanding = adminBundle?.crmStanding ?? null;
+  const adminPendingOnboarding: AdminPendingOnboarding = adminBundle
+    ? { count: adminBundle.pendingOnboarding.count, preview: adminBundle.pendingOnboarding.preview }
+    : null;
+  const crmCheckInsDue = isAdmin ? (adminBundle?.crmCheckInsDue ?? 0) : crmCheckInsDueForTeam;
 
   const feedItems = feed.map((item) => ({
     id: item.id,
@@ -193,7 +151,7 @@ export default async function DashboardPage() {
   return (
     <PageShell
       title="Dashboard"
-      subtitle="Production work management at a glance"
+      subtitle={<HelpSubtitle text="Production work management at a glance" articleId="dashboard" />}
       action={
         sessionUser ? (
           <div className="flex items-center gap-2">
@@ -203,6 +161,8 @@ export default async function DashboardPage() {
         ) : null
       }
     >
+      <DashboardQuickActions role={role} firstName={sessionUser?.fullName} />
+
       {adminPendingOnboarding && adminPendingOnboarding.count > 0 ? (
         <Card className="border-amber-200/90 bg-amber-50/50 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -446,7 +406,10 @@ export default async function DashboardPage() {
         <Card className="p-5">
           <div className="mb-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-base font-medium text-zinc-900">Activity & notifications</h2>
+              <h2 className="inline-flex items-center gap-1.5 text-base font-medium text-zinc-900">
+                Activity & notifications
+                <HelpHint articleId="dashboard" />
+              </h2>
               <Badge className="bg-zinc-100 text-zinc-700">
                 {feedShownCount} shown · {feedItems.length} total
               </Badge>

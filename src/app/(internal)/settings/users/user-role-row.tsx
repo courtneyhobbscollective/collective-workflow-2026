@@ -3,6 +3,7 @@
 import { UserRole } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { ROLE_LABELS } from "@/lib/roles";
 import { deleteUserFromForm, updateUserRoleFromForm } from "./actions";
 
 type RowUser = {
@@ -120,9 +121,9 @@ function RoleFields(props: {
         onChange={(e) => setRole(e.target.value as UserRole)}
         className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm disabled:opacity-60"
       >
-        <option value={UserRole.admin}>Admin</option>
-        <option value={UserRole.team_member}>Team member</option>
-        <option value={UserRole.client}>Client</option>
+        <option value={UserRole.admin}>{ROLE_LABELS.admin}</option>
+        <option value={UserRole.team_member}>{ROLE_LABELS.team_member}</option>
+        <option value={UserRole.client}>{ROLE_LABELS.client}</option>
       </select>
       {role === UserRole.client ? (
         <select

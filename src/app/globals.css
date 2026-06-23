@@ -107,7 +107,7 @@ body {
   }
 
   .animate-page-enter {
-    animation: wf-page-enter 320ms var(--wf-ease-out) both;
+    animation: wf-page-enter 160ms var(--wf-ease-out) both;
   }
 
   .animate-in-fade-up {

@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireRoleApi } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  const role = await requireRoleApi(["admin", "team_member"]);
+  if (!role) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const key = process.env.GIPHY_API_KEY;
   if (!key) {
     return NextResponse.json(

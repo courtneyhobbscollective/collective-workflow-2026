@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
 import { getSessionUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -141,7 +142,7 @@ export default async function PortalPage() {
   return (
     <PageShell
       title="Client portal"
-      subtitle="Your active work and delivery updates"
+      subtitle={<HelpSubtitle text="Your active work and delivery updates" articleId="portal-overview" helpBasePath="/portal/help" />}
       action={
         user ? (
           <div className="flex items-center gap-2">
@@ -163,7 +164,7 @@ export default async function PortalPage() {
       }
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
-        <Section title="Active briefs" subtitle="Sorted by most recently created">
+        <Section title="Active briefs" subtitle="Sorted by most recently created" helpArticleId="brief-statuses" helpBasePath="/portal/help">
           {briefs.length ? (
             <div className="space-y-2">
               {briefs.map((b) => (

@@ -1,3 +1,5 @@
+import { HelpHint } from "@/components/help/help-hint";
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PageShell } from "@/components/workflow/page-shell";
@@ -54,7 +56,7 @@ export default async function CrmLeadsPage({
   return (
     <PageShell
       title="Leads"
-      subtitle="Open pipeline (not won or lost)"
+      subtitle={<HelpSubtitle text="Open pipeline (not won or lost)" articleId="crm-leads" />}
       action={
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700">
@@ -66,6 +68,7 @@ export default async function CrmLeadsPage({
                 maximumFractionDigits: 2,
               })}
             </span>
+            <HelpHint articleId="crm-leads" className="ml-1.5" />
           </span>
           {showNewLeadForm ? (
             <Link

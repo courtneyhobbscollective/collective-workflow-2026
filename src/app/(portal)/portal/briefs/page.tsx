@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
 import { StatusPill } from "@/components/workflow/status-pill";
 import { getSessionUserId } from "@/lib/auth";
@@ -10,8 +11,11 @@ export default async function PortalBriefsPage() {
   const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
   const briefs = await prisma.brief.findMany({ where: { clientId: user?.clientId ?? "" }, orderBy: { deadline: "asc" } });
   return (
-    <PageShell title="Briefs" subtitle="Your delivery pipeline">
-      <Section title="All briefs" subtitle="Sorted by deadline">
+    <PageShell
+      title="Briefs"
+      subtitle={<HelpSubtitle text="Your delivery pipeline" articleId="brief-statuses" helpBasePath="/portal/help" />}
+    >
+      <Section title="All briefs" subtitle="Sorted by deadline" helpArticleId="brief-statuses" helpBasePath="/portal/help">
         {briefs.length ? (
           <div className="space-y-2">
             {briefs.map((b) => (

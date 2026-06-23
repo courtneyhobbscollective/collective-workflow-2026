@@ -37,6 +37,11 @@ export function LoginForm(props: { error?: string; resetSuccess?: boolean }) {
             Invalid email or password.
           </div>
         ) : null}
+        {props.error === "session" ? (
+          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+            Your session was out of date (often after account changes). Please sign in again.
+          </div>
+        ) : null}
         <form
           className="mt-5 space-y-4"
           onSubmit={pwForm.handleSubmit((values) =>

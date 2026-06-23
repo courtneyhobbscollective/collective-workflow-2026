@@ -60,7 +60,7 @@ export default async function TeamUsersPage() {
   return (
     <PageShell
       title="Users"
-      subtitle="Add people to the platform and assign admin, team, or client access"
+      subtitle="Super Admins see everything. Staff see Delivery and Comms only (no Sales or Business). Clients use the portal."
     >
       <Section
         title="Invite user"

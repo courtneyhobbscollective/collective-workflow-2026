@@ -105,6 +105,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     <p className="text-sm font-medium text-zinc-900">Point of contact</p>
                     <input name="pocName" defaultValue={poc?.name ?? ""} placeholder="Name" required className="w-full" />
                     <input name="pocEmail" defaultValue={poc?.email ?? ""} placeholder="Email" required className="w-full" />
+                    <input
+                      name="pocPhone"
+                      defaultValue={poc?.phoneNumber ?? ""}
+                      placeholder="Phone (optional)"
+                      className="w-full"
+                    />
                     <input name="pocTitle" defaultValue={poc?.title ?? ""} placeholder="Title (optional)" className="w-full" />
                   </div>
 
@@ -112,6 +118,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     <p className="text-sm font-medium text-zinc-900">Accounts contact</p>
                     <input name="accountsName" defaultValue={accounts?.name ?? ""} placeholder="Name" className="w-full" />
                     <input name="accountsEmail" defaultValue={accounts?.email ?? ""} placeholder="Email" className="w-full" />
+                    <input
+                      name="accountsPhone"
+                      defaultValue={accounts?.phoneNumber ?? ""}
+                      placeholder="Phone (optional)"
+                      className="w-full"
+                    />
                     <input name="accountsTitle" defaultValue={accounts?.title ?? ""} placeholder="Title (optional)" className="w-full" />
                   </div>
                 </div>
@@ -146,13 +158,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div className="rounded-lg bg-zinc-50 px-4 py-3 border border-zinc-100">
                     <p className="text-xs text-zinc-600">Point of contact</p>
-                    <p className="mt-1 text-sm font-medium text-zinc-900">{poc?.name ?? "—"}</p>
+                    <p className="mt-1 text-sm font-medium text-zinc-900">
+                      {[poc?.firstName, poc?.lastName].filter(Boolean).join(" ") || poc?.name || "—"}
+                    </p>
                     <p className="text-xs text-zinc-600">{poc?.email ?? ""}</p>
+                    {poc?.phoneNumber ? <p className="text-xs text-zinc-600">{poc.phoneNumber}</p> : null}
                   </div>
                   <div className="rounded-lg bg-zinc-50 px-4 py-3 border border-zinc-100">
                     <p className="text-xs text-zinc-600">Accounts contact</p>
-                    <p className="mt-1 text-sm font-medium text-zinc-900">{accounts?.name ?? "—"}</p>
+                    <p className="mt-1 text-sm font-medium text-zinc-900">
+                      {[accounts?.firstName, accounts?.lastName].filter(Boolean).join(" ") || accounts?.name || "—"}
+                    </p>
                     <p className="text-xs text-zinc-600">{accounts?.email ?? ""}</p>
+                    {accounts?.phoneNumber ? <p className="text-xs text-zinc-600">{accounts.phoneNumber}</p> : null}
                   </div>
                 </div>
               </div>

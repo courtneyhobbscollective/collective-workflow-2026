@@ -5,16 +5,23 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import {
+  createSessionToken,
+  SESSION_COOKIE_NAME,
+  sessionCookieOptions,
+} from "@/lib/session-cookie";
 
-/** Sets session cookies for an existing user. Throws if the user does not exist. */
+/** Sets a signed session cookie for an existing user. Throws if the user does not exist. */
 async function establishSessionForUser(userId: string): Promise<{ role: UserRole }> {
   const cookieStore = await cookies();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new Error("USER_NOT_FOUND");
   }
-  cookieStore.set("workflow_role", user.role, { httpOnly: true, path: "/" });
-  cookieStore.set("workflow_user_id", user.id, { httpOnly: true, path: "/" });
+  const token = await createSessionToken(user.id, user.role);
+  cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+  cookieStore.delete("workflow_role");
+  cookieStore.delete("workflow_user_id");
   return { role: user.role };
 }
 

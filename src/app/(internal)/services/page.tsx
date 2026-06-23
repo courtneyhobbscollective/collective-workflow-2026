@@ -1,3 +1,4 @@
+import { HelpSubtitle } from "@/components/help/help-subtitle";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PageShell } from "@/components/workflow/page-shell";
@@ -17,7 +18,10 @@ export default async function ServicesCatalogPage() {
   });
 
   return (
-    <PageShell title="Services" subtitle="Catalog products and packages for briefs">
+    <PageShell
+      title="Services"
+      subtitle={<HelpSubtitle text="Catalog products and packages for briefs" articleId="services" />}
+    >
       {products.length === 0 ? (
         <Card className="p-8 text-center text-sm text-zinc-500">No service products yet. Admins can add them from tooling or seed data.</Card>
       ) : (
