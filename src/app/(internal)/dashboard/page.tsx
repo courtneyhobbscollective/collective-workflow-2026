@@ -442,7 +442,7 @@ export default async function DashboardPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="stagger-children grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <div className="mb-4">
             <div className="flex items-center justify-between gap-2">

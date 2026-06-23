@@ -15,13 +15,13 @@ export function ClientAuthShell(props: {
   footer?: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-zinc-50 px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
+    <div className="min-h-screen animate-in-fade-in bg-zinc-50 px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
       <div className="relative mx-auto max-w-md">
-        <div className="mb-8 flex flex-col items-center sm:mb-10">
+        <div className="mb-8 flex flex-col items-center animate-in-fade-up sm:mb-10">
           <WorkflowBrandMark href="/login" variant="zinc" />
         </div>
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm sm:p-6">
+        <div className="animate-in-scale-in rounded-lg border border-zinc-200 bg-white p-6 shadow-sm sm:p-6">
           {props.headerExtra ? <div className="mb-6">{props.headerExtra}</div> : null}
 
           {props.eyebrow ? (

@@ -1,4 +1,6 @@
 import { Card } from "@/components/ui";
+import { StaggerChildren } from "@/components/ui/motion";
+import { cn } from "@/lib/utils";
 import { PropsWithChildren, ReactNode } from "react";
 
 export function PageShell(
@@ -27,12 +29,14 @@ export function PageShell(
 
   return (
     <div className="space-y-6">
-      {props.headerCard ? (
-        <Card className="p-5 sm:p-6">{header}</Card>
-      ) : (
-        header
-      )}
-      {props.children}
+      <div className={cn(!props.headerCard && "animate-in-fade-up")}>
+        {props.headerCard ? (
+          <Card className="animate-in-scale-in p-5 sm:p-6">{header}</Card>
+        ) : (
+          header
+        )}
+      </div>
+      <StaggerChildren className="space-y-6">{props.children}</StaggerChildren>
     </div>
   );
 }

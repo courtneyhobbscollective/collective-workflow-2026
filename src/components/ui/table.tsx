@@ -12,7 +12,7 @@ export function TableHeader(props: PropsWithChildren) {
 }
 
 export function TableBody(props: PropsWithChildren) {
-  return <div className="min-w-[640px]">{props.children}</div>;
+  return <div className="stagger-rows min-w-[640px]">{props.children}</div>;
 }
 
 export function TableRow(props: PropsWithChildren<{ className?: string }>) {

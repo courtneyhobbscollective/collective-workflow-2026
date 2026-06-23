@@ -46,7 +46,7 @@ export default async function MessagesLayout({ children }: { children: React.Rea
           <code className="rounded bg-zinc-100 px-1 text-xs">GIPHY_API_KEY</code>).
         </p>
       </div>
-      <div className="flex h-[calc(100dvh-10rem)] min-h-[22rem] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] lg:h-[calc(100dvh-7.25rem)]">
+      <div className="animate-in-scale-in flex h-[calc(100dvh-10rem)] min-h-[22rem] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] lg:h-[calc(100dvh-7.25rem)]">
         <TeamChatSidebar
           channels={channels}
           dmThreads={dmThreads}

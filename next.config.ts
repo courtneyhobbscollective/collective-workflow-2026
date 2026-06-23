@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 const configDir = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["192.168.1.163"],
   // Load Prisma from node_modules at runtime. Bundling `@prisma/client` (especially under Turbopack)
   // can ship a stale/incomplete client where new models (e.g. serviceProduct) are missing.
   serverExternalPackages: ["@prisma/client", "prisma"],

@@ -66,7 +66,7 @@ export function InternalAiChatWidget() {
   return (
     <div className="fixed bottom-5 right-5 z-50">
       {open ? (
-        <div className="w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-zinc-200 bg-white shadow-2xl">
+        <div className="animate-in-scale-in w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-zinc-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-zinc-900">Workflow AI</p>
@@ -120,7 +120,7 @@ export function InternalAiChatWidget() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-zinc-800"
+          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:bg-zinc-800 hover:shadow-xl active:scale-[0.98]"
           aria-label="Open assistant"
         >
           <MessageSquare className="h-4 w-4" />

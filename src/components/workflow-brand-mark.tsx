@@ -7,9 +7,11 @@ type Props = {
   /** Text colour for “Workflow” */
   variant?: "stone" | "zinc";
   className?: string;
+  /** Icon-only mark for collapsed sidebar */
+  compact?: boolean;
 };
 
-export function WorkflowBrandMark({ href = "/login", variant = "stone", className }: Props) {
+export function WorkflowBrandMark({ href = "/login", variant = "stone", className, compact = false }: Props) {
   const textClass = variant === "zinc" ? "text-zinc-900" : "text-stone-900";
 
   const inner = (
@@ -19,14 +21,18 @@ export function WorkflowBrandMark({ href = "/login", variant = "stone", classNam
         alt=""
         width={40}
         height={40}
-        className="h-10 w-10 shrink-0 object-contain"
+        className={compact ? "h-9 w-9 shrink-0 object-contain" : "h-10 w-10 shrink-0 object-contain"}
         unoptimized
       />
-      <span className={`text-[15px] font-semibold tracking-tight ${textClass}`}>Workflow</span>
+      {compact ? null : (
+        <span className={`text-[15px] font-semibold tracking-tight ${textClass}`}>Workflow</span>
+      )}
     </>
   );
 
-  const wrapClass = `group inline-flex items-center gap-2.5 rounded-lg px-1 py-1 transition hover:opacity-90 ${className ?? ""}`;
+  const wrapClass = compact
+    ? `inline-flex items-center justify-center rounded-lg p-1 transition hover:opacity-90 ${className ?? ""}`
+    : `group inline-flex items-center gap-2.5 rounded-lg px-1 py-1 transition hover:opacity-90 ${className ?? ""}`;
 
   if (href != null) {
     return (

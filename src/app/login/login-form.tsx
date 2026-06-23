@@ -25,11 +25,11 @@ export function LoginForm(props: { error?: string; resetSuccess?: boolean }) {
 
   return (
     <div className="mx-auto mt-12 max-w-md space-y-8">
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center animate-in-fade-up">
         <WorkflowBrandMark href="/login" variant="zinc" />
       </div>
 
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="animate-in-scale-in rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-zinc-900">Sign in</h1>
         <p className="mt-1 text-sm text-zinc-500">Use the email and password for your account.</p>
         {props.error === "password" ? (

@@ -4,7 +4,16 @@ import { PropsWithChildren } from "react";
 import Link from "next/link";
 
 export function Card({ children, className }: PropsWithChildren<{ className?: string }>) {
-  return <div className={cn("rounded-xl border border-zinc-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]", className)}>{children}</div>;
+  return (
+    <div
+      className={cn(
+        "surface-interactive rounded-xl border border-zinc-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function Badge({ children, className }: PropsWithChildren<{ className?: string }>) {
